@@ -79,13 +79,18 @@ A>DATE
 
 Direct downloads:
 [Sargon 2.1](http://www.retroarchive.org/cpm/games/sargon.zip) ·
+[Nemesis](http://www.retroarchive.org/cpm/games/nemesis.zip) ·
 [Zork I–III](http://www.retroarchive.org/cpm/games/zork123_80.zip) ·
 [Adventure + many games](http://www.retroarchive.org/cpm/games/manygame.zip)
 
 Most CP/M `.COM` games work if you upload the program and any data files with
 their exact 8.3 names. Tested from that archive:
 
-- **Sargon 2.1** (`SARGON.COM`) — plays normally.
+- **Sargon 2.1** (`SARGON.COM`) — plays normally; the zip installer runs it
+  automatically.
+- **Nemesis** (`NEMESIS.COM` + data files) — installs and starts; it needs a
+  `TERM.DEF`, so run `TERMDEF` first, then `NEMESIS <character>` (characters
+  are created with `PERSON.COM`).
 - **Zork I** (`ZORK1.COM` + `ZORK1.DAT`) — intro, movement and parser work.
 - **Adventure** (`ADVENTUR.COM` + the `.DAT` files) — needs the message file
   unsqueezed first: run `USQ ADVENTUR.MQG`, accept `ADVENTUR.MSG`, then start

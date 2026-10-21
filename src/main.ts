@@ -401,7 +401,9 @@ async function importFiles(list: FileList | File[]): Promise<void> {
   con.focus();
 }
 
-const GAME_EXTENSIONS = new Set(['COM', 'DAT', 'MSG', 'SUB', 'TXT', 'DOC', 'ASM', 'HEX']);
+const SKIP_EXTENSIONS = new Set([
+  'ZIP', 'JPG', 'JPEG', 'PNG', 'GIF', 'PDF', 'MAC', 'BAS', 'ASM', 'PLM', 'DOC', 'LBR', 'DIZ',
+]);
 
 async function installGameZip(file: File): Promise<void> {
   if (machine.busy) {
@@ -431,6 +433,7 @@ async function installGameZip(file: File): Promise<void> {
   const coms: string[] = [];
   let hasMqg = false;
   let installed = 0;
+  const zipBase = file.name.replace(/\.zip$/i, '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
 
   for (const [path, data] of Object.entries(entries)) {
     if (path.endsWith('/') || path.includes('__MACOSX')) continue;
@@ -439,7 +442,7 @@ async function installGameZip(file: File): Promise<void> {
     const dot = base.lastIndexOf('.');
     const rawExt = dot > 0 ? base.slice(dot + 1).toUpperCase() : '';
     if (rawExt === 'MQG') hasMqg = true;
-    if (!GAME_EXTENSIONS.has(rawExt) || data.length > MAX_UPLOAD) continue;
+    if (data.length > MAX_UPLOAD || SKIP_EXTENSIONS.has(rawExt)) continue;
 
     const cpm = toCpmName(base);
     const target = uniqueName(disk, machine.bdos.user, cpm.name, cpm.ext);
@@ -459,12 +462,17 @@ async function installGameZip(file: File): Promise<void> {
   }
   con.write(`\r\n* Installed ${installed} file${installed === 1 ? '' : 's'} from ${file.name} on ${letter}:.\r\n`);
 
-  if (coms.length === 1 && !hasMqg) {
+  const preferred = coms.find((name) => name.replace(/[^A-Z0-9]/gi, '').toUpperCase() === zipBase);
+  if (preferred && !hasMqg) {
+    con.write(`* Running ${preferred}...\r\n`);
+    if (targetDrive !== machine.bdos.drive) con.send(`${letter}:\r\n`);
+    con.send(`${preferred}\r`);
+  } else if (coms.length === 1 && !hasMqg) {
     con.write(`* Running ${coms[0]}...\r\n`);
     if (targetDrive !== machine.bdos.drive) con.send(`${letter}:\r\n`);
     con.send(`${coms[0]}\r`);
   } else if (coms.length > 1) {
-    con.write(`* Type ${letter}:${coms[0]} (or another .COM) to play.\r\n`);
+    con.write(`* Type ${letter}:${preferred ?? coms[0]} (or another .COM) to play.\r\n`);
   } else if (hasMqg) {
     con.write('* Run USQ on the .MQG file to decode the message file first.\r\n');
   } else {
