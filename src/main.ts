@@ -164,6 +164,8 @@ const exportImageBtn = el<HTMLButtonElement>('export-image-btn');
 const ejectImageBtn = el<HTMLButtonElement>('eject-image-btn');
 const consoleDrive = el('console-drive');
 const terminalSelect = el<HTMLSelectElement>('terminal-type');
+const speedEl = el('speed');
+const resetMachine = el<HTMLButtonElement>('reset-machine');
 const usage = el('usage');
 const usageBar = el<HTMLDivElement>('usage-bar');
 const led = el('led');
@@ -680,9 +682,19 @@ machine.onRefresh = () => {
 machine.onBusy = (busy) => {
   consolePanel.classList.toggle('busy', busy);
   statusText.textContent = busy ? 'RUNNING' : 'READY';
+  speedEl.textContent = busy ? '…' : 'IDLE';
   dropzone.classList.toggle('disabled', busy);
   resetBtn.disabled = busy;
 };
+machine.onSpeed = (mhz) => {
+  speedEl.textContent = `≈ ${Math.max(1, Math.round(mhz))} MHz`;
+};
+
+resetMachine.addEventListener('click', () => {
+  if (machine.busy && !confirm('A program is running. Reboot the emulator anyway?')) return;
+  saveAllDrives();
+  window.location.reload();
+});
 
 window.addEventListener('resize', () => {
   applyFontSize();

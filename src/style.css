@@ -168,6 +168,8 @@ body::after {
 
 .panel-bar { height: 40px; border-bottom: 1px solid var(--line); background: var(--panel-2); }
 
+.panel-title { white-space: nowrap; }
+
 .panel-status { display: inline-flex; align-items: center; gap: 8px; }
 
 .panel-tools { display: flex; align-items: center; gap: 14px; }
@@ -237,6 +239,11 @@ body::after {
 .panel-foot { height: 36px; border-top: 1px solid var(--line); background: var(--panel-2); text-transform: none; letter-spacing: 0.02em; }
 
 .clock { color: var(--muted); opacity: 0.8; }
+
+.speed {
+  color: var(--green-2);
+  font-variant-numeric: tabular-nums;
+}
 
 @media (max-width: 900px) {
   .clock { display: none; }
@@ -969,6 +976,10 @@ body { overflow: hidden; }
   }
 
   .sidebar-close { display: grid; }
+
+  .panel-bar { padding: 0 10px; gap: 8px; }
+  .panel-tools { gap: 8px; }
+  .panel-title { font-size: 10px; letter-spacing: 0.06em; }
 
   .panel-toggle {
     width: 28px;

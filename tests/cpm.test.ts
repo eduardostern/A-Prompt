@@ -60,6 +60,15 @@ describe('CP/M 2.2 machine', () => {
     expect(con.output).toContain('Hello from CP/M 2.2!');
   });
 
+  it('returns to the CCP when a program halts the CPU', async () => {
+    const { machine, con } = boot();
+    machine.disk.put('HALT', 'COM', new Uint8Array([0x76]));
+    const halt = machine.disk.find(0, 'HALT    ', 'COM')!;
+    await machine.runCom(halt, 'HALT');
+    expect(machine.busy).toBe(false);
+    expect(con.output).not.toContain('execution limit');
+  });
+
   it('DIR lists bundled files', async () => {
     const { machine, con } = boot();
     await machine.ccp.execute('DIR');

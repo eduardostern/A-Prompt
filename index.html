@@ -39,6 +39,7 @@
                 <option value="adm3a">ADM-3A</option>
                 <option value="vt52">VT52</option>
               </select>
+              <button id="reset-machine" class="panel-toggle" type="button" title="Reboot the emulator (drives preserved)" aria-label="Reboot the emulator">↻ <span class="panel-toggle-label">Reset</span></button>
               <span class="panel-status"><i id="led" class="led"></i><span id="status-text">BOOTING</span></span>
             </div>
           </div>
@@ -48,7 +49,7 @@
           </div>
 
           <div class="panel-foot">
-            <span class="mono">Z80 · 64K · TPA 0100h–FBFFh</span>
+            <span class="mono" title="Approximate effective Z80 clock, derived from T-states per second">Z80 · 64K · <span id="speed" class="speed">IDLE</span></span>
             <span id="clock" class="mono clock"></span>
             <span id="foot-hint">Ctrl+C interrupts · type HELP</span>
           </div>

@@ -36,6 +36,7 @@ export class CpmMachine {
 
   onRefresh?: () => void;
   onBusy?: (busy: boolean) => void;
+  onSpeed?: (mhz: number) => void;
   yieldFn: () => Promise<void> = () => new Promise((r) => requestAnimationFrame(() => r()));
 
   private warm = false;
@@ -219,6 +220,8 @@ export class CpmMachine {
     const started = performance.now();
     let slice = started;
     let steps = 0;
+    let sampleTime = started;
+    let sampleSteps = 0;
 
     try {
       while (!this.warm && !this.stopped) {
@@ -233,8 +236,19 @@ export class CpmMachine {
         }
         cpu.step();
         steps++;
+        if (cpu.halted) {
+          // A HALT with no interrupt source would otherwise spin here until
+          // the execution limit. Treat it as the end of the program.
+          break;
+        }
         if ((steps & 0x1fff) === 0) {
           const now = performance.now();
+          if (now - sampleTime >= 250) {
+            const mhz = ((steps - sampleSteps) * 4) / ((now - sampleTime) / 1000) / 1_000_000;
+            this.onSpeed?.(mhz);
+            sampleTime = now;
+            sampleSteps = steps;
+          }
           if (now - slice > 10) {
             await this.yieldFn();
             slice = performance.now();
