@@ -1,3 +1,4 @@
+/*! A-Prompt — © 2026 Eduardo Stern <eduardostern@icloud.com> — MIT License */
 import './style.css';
 import { unzip } from './zip';
 import { XtermConsole } from './terminal';

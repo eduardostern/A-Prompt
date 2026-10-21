@@ -4,6 +4,13 @@
   "version": "1.0.0",
   "type": "module",
   "description": "A-Prompt — a CP/M 2.2 emulator with an original Z80 CPU core for the browser",
+  "author": "Eduardo Stern <eduardostern@icloud.com>",
+  "license": "MIT",
+  "homepage": "https://a-prompt.stern.workers.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/eduardostern/A-Prompt.git"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",

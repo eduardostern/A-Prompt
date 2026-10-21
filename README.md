@@ -20,6 +20,8 @@ the original Digital Research binaries distributed at
 
 **Live demo:** <https://a-prompt.stern.workers.dev>
 
+**Created by [Eduardo Stern](mailto:eduardostern@icloud.com)** · [GitHub](https://github.com/eduardostern)
+
 The name comes from CP/M's unmistakable `A>` prompt.
 
 ![A-Prompt terminal](docs/screenshot.png)
@@ -235,12 +237,21 @@ original files from RetroArchive and install them with **Install .zip** (or
 3. Run `MBASIC`; you should see `BASIC-80 Rev. 5.21` and an `Ok` prompt.
 4. Leave BASIC with `SYSTEM`.
 
-### dBASE II 2.43
+### dBASE II 2.3B (works)
 
-1. Download [dbaseii.zip](http://www.retroarchive.org/cpm/dbase/dbaseii.zip).
-2. **Install .zip** → `dbaseii.zip` (installs `DBASE.COM`, `DBASEOVR.COM`
-   and `DBASEMSG.TXT`).
-3. Run `DBASE`.
+The Kaypro 2.43 build and the 2.4 build install but stall in a blank overlay
+loop. The **2.3B generic build works**:
+
+1. Download [ASHTONPAK.ZIP](http://www.retroarchive.org/cpm/dbase/ashtonpak.zip)
+   (1.2 MB; it contains several Ashton-Tate programs).
+2. Extract only `DBASE-II/CPM80/V2-3B/` from the zip.
+3. Upload all files from that folder to a drive (or zip just that folder and
+   use **Install .zip**).
+4. Run `DBASE`; press **Enter** at `ENTER TODAYS DATE AS MM/DD/YY` and you get
+   the dot prompt.
+
+Tested: `dBASE II Ver 2.3B 22 FEB 82`, `. ? 2+2` → `4`. The Kaypro-specific
+2.43 build still has the blank-screen problem and is not recommended.
 
 ### Turbo Pascal 3
 
@@ -250,17 +261,6 @@ original files from RetroArchive and install them with **Install .zip** (or
 
 Tested: it boots into the Turbo Pascal 3.00A IDE (default “Kaypro with
 hi-lite” terminal); use `TINST` to switch to ANSI.
-
-### dBASE II 2.43
-
-1. Download [dbaseii.zip](http://www.retroarchive.org/cpm/dbase/dbaseii.zip).
-2. **Install .zip** → `dbaseii.zip` (installs `DBASE.COM`, `DBASEOVR.COM`
-   and `DBASEMSG.TXT`).
-3. Run `DBASE`.
-
-**Status: experimental.** Both the Kaypro 2.43 build and the generic 2.4 build
-install and start, and `INSTALL` saves the terminal configuration, but the
-runtime currently stalls in a blank overlay loop. Not fixed yet.
 
 ### SuperCalc 1.x / 2
 
@@ -388,12 +388,20 @@ V4.1 Flash**. No Claude, GPT, Grok, or other OpenAI/Anthropic/xAI model was
 involved — so no former-OpenAI tokens were harmed. The only transformer here
 is the one in the power supply.
 
+## Author
+
+**Eduardo Stern** — <eduardostern@icloud.com> — [github.com/eduardostern](https://github.com/eduardostern)
+
+A-Prompt was designed and built by Eduardo Stern. See `AUTHORS`.
+
 ## Credits and license
 
-- Emulator code: MIT (`LICENSE`).
+- A-Prompt source, UI, tests and original documentation: **MIT**, © 2026
+  Eduardo Stern (`LICENSE`).
 - CP/M binaries: © Digital Research, redistributed under the license granted
   by DRDOS, Inc. / Bryan Sparks, available at
   [cpm.z80.de/license.html](http://www.cpm.z80.de/license.html).
 - `HELLO.COM`, `HELLO.ASM` and `DEMO.SUB` are original examples for this
   project.
-- xterm.js is © its authors, MIT license.
+- xterm.js, fflate and other dependencies retain their own MIT licenses.
+- `zexdoc`/`zexall` are Frank Cringle's public-domain Z80 exercisers.

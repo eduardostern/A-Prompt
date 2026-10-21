@@ -1,3 +1,4 @@
+/*! A-Prompt — © 2026 Eduardo Stern <eduardostern@icloud.com> — MIT License */
 /*
  * Z80 CPU core.
  *
