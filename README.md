@@ -39,14 +39,16 @@ There is no backend and no WebAssembly: `dist/` is a plain static site.
   rename, attributes, user areas 0–15, DMA and DPB.
 - **CCP**: `DIR`, `ERA`, `TYPE`, `REN`, `USER`, `SAVE`, `CLS`, `HELP`, drive
   selection (A:–D:), and `.COM` execution with command tail and default FCBs.
-- **Real `SUBMIT`**: the CCP consumes `$$$.SUB` one record at a time.
+- **Real `SUBMIT`**: the CCP consumes `$$$.SUB` one record at a time;
+  **`XSUB`** feeds the remaining lines to programs that read the console.
 - **Terminal profiles**: ANSI/VT100, ADM-3A and VT52 escape-sequence
   translation, with CP437 character mapping.
 - **Upload/download** from the drive panel; drives A:–D: (4 MB each, 16K
   blocks) are persisted in the browser's `localStorage`.
 
 Bundled programs: **PIP**, **STAT**, **DDT**, **ED**, **ASM**, **LOAD**,
-**SUBMIT**, **DUMP**, **HELLO.COM**, plus a **DEMO.SUB**.
+**SUBMIT**, **DUMP**, **HELLO.COM**, **INPUT.COM**, plus **DEMO.SUB** and
+**XSUB.SUB**.
 
 ```text
 A>DIR
@@ -56,7 +58,23 @@ A>ED HELLO.ASM
 A>ASM HELLO.ASM
 A>LOAD HELLO
 A>SUBMIT DEMO
+A>SUBMIT XSUB
 ```
+
+## Running games
+
+Most CP/M `.COM` games work if you upload the program and any data files with
+their exact 8.3 names. Tested from
+[retroarchive.org/cpm/games](http://www.retroarchive.org/cpm/games/games.htm):
+
+- **Sargon 2.1** (`SARGON.COM`) — plays normally.
+- **Zork I** (`ZORK1.COM` + `ZORK1.DAT`) — intro, movement and parser work.
+- **Adventure** (`ADVENTUR.COM` + the `.DAT` files) — needs the message file
+  unsqueezed first: run `USQ ADVENTUR.MQG`, accept `ADVENTUR.MSG`, then start
+  the game.
+
+Select ADM-3A or VT52 in the console toolbar if a game assumes one of those
+terminals. Games are not bundled with A-Prompt; uploads stay in your browser.
 
 ## Deploy on Cloudflare
 
@@ -105,8 +123,6 @@ visitor's browser (`localStorage`), so every visitor has their own drive A:.
 - No raw sector I/O yet (BIOS READ/WRITE). Software that talks to physical
   disks (FORMAT, DSKMAINT) will not work.
 - CP/M 2.2 only (not CP/M 3); no clock, serial or printer.
-- `XSUB` is not included: programs that read the keyboard during a `SUBMIT`
-  receive input from the terminal.
 - Terminal profiles cover ANSI/VT100, ADM-3A and VT52; software that requires
   another terminal (Hazeltine, Televideo, Wyse, etc.) may render oddly.
 

@@ -3,7 +3,7 @@ import type { Disk } from './disk';
 import { displayName, parseName, padName, padExt } from './disk';
 import { readConsoleLine } from '../console';
 
-const BUILTINS = ['DIR', 'ERA', 'TYPE', 'REN', 'USER', 'SAVE', 'CLS', 'HELP', 'EXIT'];
+const BUILTINS = ['DIR', 'ERA', 'TYPE', 'REN', 'USER', 'SAVE', 'CLS', 'HELP', 'EXIT', 'XSUB'];
 
 /**
  * Console Command Processor.  The real CCP is a CP/M program living at the top
@@ -101,6 +101,7 @@ export class Ccp {
       case 'REN': return this.ren(arg);
       case 'USER': return this.user(arg);
       case 'SAVE': return this.save(arg);
+      case 'XSUB': return this.xsub(arg);
       case 'CLS': this.console.write('\x1b[2J\x1b[H'); return;
       case 'HELP': return this.help();
       case 'EXIT':
@@ -214,6 +215,16 @@ export class Ccp {
     this.machine.refresh();
   }
 
+  private xsub(arg: string): void {
+    if (arg === 'OFF') {
+      this.bdos.xsub = false;
+      this.console.write('XSUB disabled\r\n');
+    } else {
+      this.bdos.xsub = true;
+      this.console.write('XSUB enabled\r\n');
+    }
+  }
+
   private save(arg: string): void {
     const m = arg.match(/^(\d{1,3})\s+(\S+)$/);
     if (!m) { this.console.write('SAVE?\r\n'); return; }
@@ -248,6 +259,7 @@ export class Ccp {
       '  DDT   debugger              ED    text editor',
       '  ASM   8080 assembler        LOAD  convert .HEX to .COM',
       '  SUBMIT batch files          Try: SUBMIT DEMO',
+      '  XSUB console input from SUBMIT files (XSUB / XSUB OFF)',
       '  HELLO demo                  Try: TYPE HELLO.ASM',
       '',
       'KEYS',

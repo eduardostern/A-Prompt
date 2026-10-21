@@ -172,6 +172,20 @@ describe('CP/M 2.2 machine', () => {
     expect(con.output).toContain('B: COPY');
   });
 
+  it('XSUB feeds console input from the SUBMIT queue', async () => {
+    const { machine, con } = boot();
+    const submit = machine.disk.find(0, 'SUBMIT  ', 'COM')!;
+    await machine.runCom(submit, 'SUBMIT XSUB');
+    for (let i = 0; i < 2; i++) {
+      const line = await machine.ccp.prompt();
+      await machine.ccp.execute(line);
+    }
+    expect(con.output).toContain('XSUB enabled');
+    expect(con.output).toContain('NAME?');
+    expect(con.output).toContain('ALICE');
+    expect(machine.disk.find(0, '$$$     ', 'SUB')).toBeUndefined();
+  });
+
   it('dir/rename/user builtins keep the FCB layer consistent', async () => {
     const { machine } = boot();
     await machine.ccp.execute('REN NOVO.TXT=HELLO.ASM');

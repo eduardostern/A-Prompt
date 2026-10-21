@@ -16,10 +16,13 @@ export class Bdos {
   dma = 0x0080;
   user = 0;
   drive = 0;
+  /** When true, console reads are taken from the pending $$$.SUB file. */
+  xsub = false;
 
   private open = new Map<number, OpenFile>();
   private searchEntries: SearchEntry[] = [];
   private searchIndex = 0;
+  private xsubLine: number[] = [];
 
   constructor(
     private cpu: Z80,
@@ -35,6 +38,8 @@ export class Bdos {
     this.open.clear();
     this.searchEntries = [];
     this.searchIndex = 0;
+    this.xsub = false;
+    this.xsubLine = [];
   }
 
   /** Forgets open FCBs that belong to one drive (used by the UI reset). */
@@ -63,6 +68,47 @@ export class Bdos {
 
   private currentDisk(): Disk {
     return this.drives[this.drive];
+  }
+
+  // ---- console input, optionally from a SUBMIT file (XSUB) --------------
+
+  private hasXsubInput(): boolean {
+    if (this.xsubLine.length) return true;
+    if (!this.xsub) return false;
+    const file = this.currentDisk().find(0, '$$$     ', 'SUB');
+    return !!file && file.data.length >= 128;
+  }
+
+  private hasConsoleInput(): boolean {
+    return this.con.pollByte() !== undefined || this.hasXsubInput();
+  }
+
+  /** Loads the next queued line from $$$.SUB into the XSUB buffer. */
+  private loadXsubLine(): void {
+    const disk = this.currentDisk();
+    const file = disk.find(0, '$$$     ', 'SUB');
+    if (!file || file.data.length < 128) return;
+    const records = Math.ceil(file.data.length / 128);
+    const start = (records - 1) * 128;
+    const rec = file.data.subarray(start, start + 128);
+    const len = Math.min(127, rec[0] ?? 0);
+    const line: number[] = [];
+    for (let i = 0; i < len; i++) {
+      const ch = rec[1 + i];
+      if (ch === 0) break;
+      line.push(ch);
+    }
+    line.push(13);
+    this.xsubLine = line;
+    if (start === 0) disk.remove(file);
+    else file.data = file.data.slice(0, start);
+    this.forget(file);
+  }
+
+  private async readChar(): Promise<number> {
+    if (this.xsub && !this.xsubLine.length) this.loadXsubLine();
+    if (this.xsubLine.length) return this.xsubLine.shift()!;
+    return this.con.readByte();
   }
 
   // ---- helpers ----------------------------------------------------------
@@ -205,7 +251,7 @@ export class Bdos {
         return;
 
       case 1: { // C_READ
-        const ch = await this.con.readByte();
+        const ch = await this.readChar();
         this.con.writeByte(ch);
         this.result(ch);
         break;
@@ -228,10 +274,10 @@ export class Bdos {
       case 6: { // C_RAWIO
         const e = this.cpu.e;
         if (e === 0xff) {
-          const ch = await this.con.readByte();
+          const ch = await this.readChar();
           this.result(ch);
         } else if (e === 0xfe) {
-          this.result(this.con.pollByte() !== undefined ? 0xff : 0);
+          this.result(this.hasConsoleInput() ? 0xff : 0);
         } else {
           this.con.writeByte(e);
         }
@@ -263,7 +309,7 @@ export class Bdos {
         let count = 0;
         this.cpu.a = 0;
         for (;;) {
-          const ch = await this.con.readByte();
+          const ch = await this.readChar();
           if (ch === 13) {
             this.con.writeByte(13);
             this.con.writeByte(10);
@@ -305,7 +351,7 @@ export class Bdos {
       }
 
       case 11: // C_STAT
-        this.result(this.con.pollByte() !== undefined ? 0xff : 0);
+        this.result(this.hasConsoleInput() ? 0xff : 0);
         break;
 
       case 12: // S_BDOSVER: CP/M 2.2
