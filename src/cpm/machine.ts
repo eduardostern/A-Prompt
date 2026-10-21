@@ -21,10 +21,15 @@ const initialStack = 0xfc00;
  */
 export class CpmMachine {
   readonly cpu = new Z80();
-  readonly disk = new Disk('A');
+  readonly drives: Disk[] = [new Disk('A'), new Disk('B'), new Disk('C'), new Disk('D')];
   readonly bdos: Bdos;
   readonly ccp: Ccp;
   readonly mem: Uint8Array;
+
+  /** Drive A:, kept for callers that only care about the boot disk. */
+  get disk(): Disk {
+    return this.drives[0];
+  }
 
   running = false;
   busy = false;
@@ -39,7 +44,7 @@ export class CpmMachine {
   constructor(readonly console: ConsoleIO) {
     this.mem = this.cpu.mem;
     this.initMemory();
-    this.bdos = new Bdos(this.cpu, this.disk, console, () => { this.warm = true; });
+    this.bdos = new Bdos(this.cpu, this.drives, console, () => { this.warm = true; });
     this.ccp = new Ccp(this);
   }
 

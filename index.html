@@ -15,11 +15,12 @@
           <div class="logo" aria-hidden="true">A&gt;<span>CP/M 2.2</span></div>
           <div class="brand-text">
             <h1>A-Prompt</h1>
-            <p>A CP/M 2.2 emulator · Z80 · 64 KB · drive A: with Digital Research tools</p>
+            <p>A CP/M 2.2 emulator · Z80 · 64 KB · drives A:–D: with Digital Research tools</p>
           </div>
         </div>
         <nav class="topnav">
           <a href="http://www.cpm.z80.de" target="_blank" rel="noreferrer">cpm.z80.de ↗</a>
+          <a href="https://github.com/eduardostern/A-Prompt" target="_blank" rel="noreferrer">GitHub ↗</a>
           <a href="#about">About</a>
         </nav>
       </header>
@@ -27,7 +28,7 @@
       <main class="layout">
         <section class="console-panel" aria-label="CP/M terminal">
           <div class="panel-bar">
-            <span class="panel-title">Console · A:</span>
+            <span class="panel-title" id="console-drive">Console · A:</span>
             <span class="panel-status"><i id="led" class="led"></i><span id="status-text">BOOTING</span></span>
           </div>
 
@@ -44,10 +45,16 @@
         <aside class="sidebar">
           <section class="card drive-card">
             <div class="card-head">
-              <h2>Drive A:</h2>
+              <h2 id="drive-title">Drive A:</h2>
               <span id="usage" class="usage">0 / 4 MB</span>
             </div>
             <div class="meter" aria-hidden="true"><div id="usage-bar"></div></div>
+            <div class="drive-tabs" id="drive-tabs" role="tablist" aria-label="Drive selector">
+              <button type="button" class="drive-tab active" data-drive="0" role="tab" aria-selected="true">A:</button>
+              <button type="button" class="drive-tab" data-drive="1" role="tab" aria-selected="false">B:</button>
+              <button type="button" class="drive-tab" data-drive="2" role="tab" aria-selected="false">C:</button>
+              <button type="button" class="drive-tab" data-drive="3" role="tab" aria-selected="false">D:</button>
+            </div>
             <ul id="file-list" class="file-list" aria-label="Files on drive A"></ul>
 
             <div id="dropzone" class="dropzone">
@@ -84,12 +91,19 @@
               Raw sector I/O (physical disks) is not emulated. Everything runs
               in memory; uploads are saved in this browser.
             </p>
+            <p class="muted">
+              Source, issues and releases:
+              <a href="https://github.com/eduardostern/A-Prompt" target="_blank" rel="noreferrer">github.com/eduardostern/A-Prompt</a>
+            </p>
           </section>
         </aside>
       </main>
 
       <footer class="footer">
-        <span>A-Prompt · pure TypeScript · original Z80 core</span>
+        <span>
+          A-Prompt · pure TypeScript · original Z80 core ·
+          <a href="https://github.com/eduardostern/A-Prompt" target="_blank" rel="noreferrer">source on GitHub</a>
+        </span>
         <span class="mono">CP/M 2.2 · 1979 · Digital Research</span>
       </footer>
     </div>

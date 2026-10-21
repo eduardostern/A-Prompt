@@ -1,12 +1,18 @@
 # A-Prompt
 
+[![Live demo](https://img.shields.io/badge/live-a--prompt.stern.workers.dev-5ee08f?style=flat-square)](https://a-prompt.stern.workers.dev)
 [![CI](https://github.com/eduardostern/A-Prompt/actions/workflows/ci.yml/badge.svg)](https://github.com/eduardostern/A-Prompt/actions/workflows/ci.yml)
+[![GitHub](https://img.shields.io/badge/source-GitHub-181717?style=flat-square)](https://github.com/eduardostern/A-Prompt)
+[![License: MIT](https://img.shields.io/badge/license-MIT-5ee08f?style=flat-square)](LICENSE)
 
 **A-Prompt** is a CP/M 2.2 emulator for the browser, written from scratch in
 TypeScript. Under the hood: a complete **Z80 CPU**, a BDOS with 8.3 files,
 FCBs and user areas, a console, and a CCP with the classic commands. It runs
 the original Digital Research binaries distributed at
 [cpm.z80.de](http://www.cpm.z80.de).
+
+> **Built with [OpenCode](https://opencode.ai) + DeepSeek V4.1 Flash.**
+> No Claude or GPT model was involved.
 
 **Live demo:** <https://a-prompt.stern.workers.dev>
 
@@ -32,10 +38,10 @@ There is no backend and no WebAssembly: `dist/` is a plain static site.
 - **CP/M 2.2**: console, FCBs, sequential and random files, directory search,
   rename, attributes, user areas 0–15, DMA and DPB.
 - **CCP**: `DIR`, `ERA`, `TYPE`, `REN`, `USER`, `SAVE`, `CLS`, `HELP`, drive
-  selection, and `.COM` execution with command tail and default FCBs.
+  selection (A:–D:), and `.COM` execution with command tail and default FCBs.
 - **Real `SUBMIT`**: the CCP consumes `$$$.SUB` one record at a time.
-- **Upload/download** from the drive panel; drive A: (4 MB, 16K blocks) is
-  persisted in the browser's `localStorage`.
+- **Upload/download** from the drive panel; drives A:–D: (4 MB each, 16K
+  blocks) are persisted in the browser's `localStorage`.
 
 Bundled programs: **PIP**, **STAT**, **DDT**, **ED**, **ASM**, **LOAD**,
 **SUBMIT**, **DUMP**, **HELLO.COM**, plus a **DEMO.SUB**.
@@ -94,8 +100,8 @@ visitor's browser (`localStorage`), so every visitor has their own drive A:.
 
 ## Limitations
 
-- Drive **A:** only; no raw sector I/O (BIOS READ/WRITE). Software that talks
-  to physical disks (FORMAT, DSKMAINT) will not work.
+- No raw sector I/O yet (BIOS READ/WRITE). Software that talks to physical
+  disks (FORMAT, DSKMAINT) will not work.
 - CP/M 2.2 only (not CP/M 3); no clock, serial or printer.
 - `XSUB` is not included: programs that read the keyboard during a `SUBMIT`
   receive input from the terminal.

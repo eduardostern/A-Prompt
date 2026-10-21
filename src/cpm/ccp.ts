@@ -1,4 +1,5 @@
 import type { CpmMachine } from './machine';
+import type { Disk } from './disk';
 import { displayName, parseName, padName, padExt } from './disk';
 import { readConsoleLine } from '../console';
 
@@ -13,11 +14,21 @@ export class Ccp {
   constructor(private machine: CpmMachine) {}
 
   private get console() { return this.machine.console; }
-  private get disk() { return this.machine.disk; }
+  private get disk() { return this.machine.drives[this.bdos.drive]; }
   private get bdos() { return this.machine.bdos; }
 
   private get driveLetter(): string {
-    return String.fromCharCode(65 + this.bdos.drive);
+    return this.driveLetterAt(this.bdos.drive);
+  }
+
+  private driveLetterAt(index: number): string {
+    return String.fromCharCode(65 + index);
+  }
+
+  private resolveDrive(drive: number | null): { disk: Disk; index: number } | null {
+    const index = drive ?? this.bdos.drive;
+    const disk = this.machine.drives[index];
+    return disk ? { disk, index } : null;
   }
 
   async prompt(): Promise<string> {
@@ -74,8 +85,9 @@ export class Ccp {
     // Drive selection: "A:".
     const driveSwitch = cmd.match(/^([A-P]):$/);
     if (driveSwitch) {
-      if (driveSwitch[1] === 'A') {
-        this.bdos.drive = 0;
+      const index = driveSwitch[1].charCodeAt(0) - 65;
+      if (index < this.machine.drives.length) {
+        this.bdos.drive = index;
       } else {
         this.console.write(`${driveSwitch[1]}: NO DISK\r\n`);
       }
@@ -104,7 +116,12 @@ export class Ccp {
       this.console.write(`${cmd}?\r\n`);
       return;
     }
-    const file = this.disk.find(this.bdos.user, parsed.name, padExt('COM'));
+    const target = this.resolveDrive(parsed.drive);
+    if (!target) {
+      this.console.write('NO DISK\r\n');
+      return;
+    }
+    const file = target.disk.find(this.bdos.user, parsed.name, padExt('COM'));
     if (!file) {
       this.console.write(`${cmd}?\r\n`);
       return;
@@ -118,12 +135,15 @@ export class Ccp {
   }
 
   private dir(arg: string): void {
-    const pattern = arg ? parseName(arg) : parseName('*.*');
+    const patternArg = arg && /^[A-P]:$/.test(arg) ? `${arg}*.*` : arg;
+    const pattern = patternArg ? parseName(patternArg) : parseName('*.*');
     if (!pattern) { this.console.write('DIR?\r\n'); return; }
-    if (pattern.drive !== null && pattern.drive !== 0) { this.console.write('NO DISK\r\n'); return; }
-    const files = this.disk.search(this.bdos.user, pattern.name, pattern.ext).filter((f) => !f.sys);
+    const target = this.resolveDrive(pattern.drive);
+    if (!target) { this.console.write('NO DISK\r\n'); return; }
+    const files = target.disk.search(this.bdos.user, pattern.name, pattern.ext).filter((f) => !f.sys);
     if (!files.length) { this.console.write('NO FILE\r\n'); return; }
-    const cells = files.map((f) => `${this.driveLetter}: ${f.name} ${f.ext}`);
+    const letter = this.driveLetterAt(target.index);
+    const cells = files.map((f) => `${letter}: ${f.name} ${f.ext}`);
     for (let i = 0; i < cells.length; i += 4) {
       this.console.write(cells.slice(i, i + 4).join(' : ') + '\r\n');
     }
@@ -132,14 +152,16 @@ export class Ccp {
 
   private era(arg: string): void {
     if (!arg) { this.console.write('ERA?\r\n'); return; }
-    const pattern = parseName(arg);
+    const patternArg = /^[A-P]:$/.test(arg) ? `${arg}*.*` : arg;
+    const pattern = parseName(patternArg);
     if (!pattern) { this.console.write('ERA?\r\n'); return; }
-    if (pattern.drive !== null && pattern.drive !== 0) { this.console.write('NO DISK\r\n'); return; }
-    const files = this.disk.search(this.bdos.user, pattern.name, pattern.ext);
+    const target = this.resolveDrive(pattern.drive);
+    if (!target) { this.console.write('NO DISK\r\n'); return; }
+    const files = target.disk.search(this.bdos.user, pattern.name, pattern.ext);
     let deleted = 0;
     for (const f of files) {
       if (f.ro) { this.console.write(`${displayName(f)} R/O\r\n`); continue; }
-      this.disk.remove(f);
+      target.disk.remove(f);
       this.machine.forgetFile(f);
       deleted++;
     }
@@ -150,7 +172,9 @@ export class Ccp {
     if (!arg) { this.console.write('TYPE?\r\n'); return; }
     const parsed = parseName(arg);
     if (!parsed || parsed.name.includes('?')) { this.console.write('TYPE?\r\n'); return; }
-    const file = this.disk.find(this.bdos.user, parsed.name, parsed.ext);
+    const target = this.resolveDrive(parsed.drive);
+    if (!target) { this.console.write('NO DISK\r\n'); return; }
+    const file = target.disk.find(this.bdos.user, parsed.name, parsed.ext);
     if (!file) { this.console.write('NO FILE\r\n'); return; }
     let last = 10;
     for (const b of file.data) {
@@ -170,9 +194,14 @@ export class Ccp {
     const to = parseName(m[1]);
     const from = parseName(m[2]);
     if (!to || !from) { this.console.write('REN?\r\n'); return; }
-    const file = this.disk.find(this.bdos.user, from.name, from.ext);
+    const fromIndex = from.drive ?? this.bdos.drive;
+    const toIndex = to.drive ?? this.bdos.drive;
+    if (fromIndex !== toIndex) { this.console.write('REN?\r\n'); return; }
+    const target = this.resolveDrive(fromIndex);
+    if (!target) { this.console.write('NO DISK\r\n'); return; }
+    const file = target.disk.find(this.bdos.user, from.name, from.ext);
     if (!file) { this.console.write('NO FILE\r\n'); return; }
-    if (this.disk.find(this.bdos.user, to.name, to.ext)) { this.console.write('FILE EXISTS\r\n'); return; }
+    if (target.disk.find(this.bdos.user, to.name, to.ext)) { this.console.write('FILE EXISTS\r\n'); return; }
     file.name = padName(to.name);
     file.ext = padExt(to.ext);
     this.machine.refresh();
@@ -194,7 +223,9 @@ export class Ccp {
     if (!parsed) { this.console.write('SAVE?\r\n'); return; }
     const size = pages * 256;
     const data = this.machine.mem.slice(0x0100, 0x0100 + size);
-    const f = this.disk.put(parsed.name, parsed.ext, data, this.bdos.user);
+    const target = this.resolveDrive(parsed.drive);
+    if (!target) { this.console.write('NO DISK\r\n'); return; }
+    const f = target.disk.put(parsed.name, parsed.ext, data, this.bdos.user);
     if (!f) { this.console.write('DISK FULL\r\n'); return; }
     this.machine.refresh();
   }
@@ -222,8 +253,9 @@ export class Ccp {
       'KEYS',
       '  Ctrl+C interrupt   Ctrl+H erase   Ctrl+U clear line',
       '',
-      'Drag .COM/.TXT files onto the Drive A: panel to import.',
-      'Use the download button in the file list to export.',
+      'Drives A: to D: are available. Use B: to switch, or',
+      'prefix commands: DIR B:, TYPE C:FILE.TXT, PIP B:=A:FILE.',
+      'Drag .COM/.TXT files onto the drive panel to import.',
       '',
     ];
     this.console.write(lines.join('\r\n'));

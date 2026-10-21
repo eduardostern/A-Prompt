@@ -3,26 +3,27 @@ import { Disk, CpmFile, padName, padExt, MAX_BYTES } from './disk';
 import { ConsoleIO, WarmBoot } from '../console';
 
 type SearchEntry = { file: CpmFile; extent: number };
+type OpenFile = { file: CpmFile; disk: Disk };
 
 /**
  * CP/M 2.2 BDOS.
  *
  * Programs reach this layer with `CALL 5`; the host intercepts execution at
  * 0xFE00 and calls handle().  All the classic file, directory and console
- * functions are implemented on top of the in-memory disk.
+ * functions are implemented on top of the in-memory disks.
  */
 export class Bdos {
   dma = 0x0080;
   user = 0;
-  drive = 0; // only A: exists
+  drive = 0;
 
-  private open = new Map<number, CpmFile>();
+  private open = new Map<number, OpenFile>();
   private searchEntries: SearchEntry[] = [];
   private searchIndex = 0;
 
   constructor(
     private cpu: Z80,
-    private disk: Disk,
+    public readonly drives: Disk[],
     private con: ConsoleIO,
     private onWarmBoot: () => void,
   ) {}
@@ -36,11 +37,32 @@ export class Bdos {
     this.searchIndex = 0;
   }
 
-  /** Drops any open FCB that referred to a deleted file. */
-  forget(file: CpmFile): void {
-    for (const [addr, open] of this.open) if (open === file) this.open.delete(addr);
+  /** Forgets open FCBs that belong to one drive (used by the UI reset). */
+  resetDrive(index: number): void {
+    const disk = this.drives[index];
+    if (!disk) return;
+    for (const [addr, open] of this.open) if (open.disk === disk) this.open.delete(addr);
     this.searchEntries = [];
     this.searchIndex = 0;
+  }
+
+  /** Drops any open FCB that referred to a deleted file. */
+  forget(file: CpmFile): void {
+    for (const [addr, open] of this.open) if (open.file === file) this.open.delete(addr);
+    this.searchEntries = [];
+    this.searchIndex = 0;
+  }
+
+  /** The disk addressed by an FCB (0 = default drive, 1 = A:, ...). */
+  private target(fcb: number): Disk | undefined {
+    const d = this.mem[fcb] & 0x7f;
+    if (d === 0) return this.drives[this.drive];
+    if (d <= this.drives.length) return this.drives[d - 1];
+    return undefined;
+  }
+
+  private currentDisk(): Disk {
+    return this.drives[this.drive];
   }
 
   // ---- helpers ----------------------------------------------------------
@@ -91,21 +113,23 @@ export class Bdos {
   }
 
   private validDrive(d: number): boolean {
-    return d === 0 || d === 1; // FCB 0 = default, 1 = A:
+    return d === 0 || (d >= 1 && d <= this.drives.length);
   }
-
-  private fileFor(fcb: number): CpmFile | undefined {
-    const f = this.open.get(fcb);
-    if (f) return f;
+  private fileFor(fcb: number): OpenFile | undefined {
+    const open = this.open.get(fcb);
+    if (open) return open;
     const n = this.fcbName(fcb);
-    if (!this.validDrive(n.drive)) return undefined;
-    const found = this.disk.find(this.user, n.name, n.ext);
-    if (found) this.open.set(fcb, found);
-    return found;
+    const disk = this.target(fcb);
+    if (!disk) return undefined;
+    const found = disk.find(this.user, n.name, n.ext);
+    if (!found) return undefined;
+    const entry = { file: found, disk };
+    this.open.set(fcb, entry);
+    return entry;
   }
 
-  private setOpenState(fcb: number, f: CpmFile): void {
-    this.open.set(fcb, f);
+  private setOpenState(fcb: number, f: CpmFile, disk: Disk): void {
+    this.open.set(fcb, { file: f, disk });
     this.mem[(fcb + 12) & 0xffff] = 0; // EX
     this.mem[(fcb + 13) & 0xffff] = 0; // S1
     this.mem[(fcb + 14) & 0xffff] = 0; // S2
@@ -125,13 +149,13 @@ export class Bdos {
     return true;
   }
 
-  private writeRecord(f: CpmFile, record: number): boolean {
+  private writeRecord(f: CpmFile, record: number, disk: Disk): boolean {
     const off = record * 128;
     const end = off + 128;
     if (f.data.length < end) {
       const grown = new Uint8Array(end);
       grown.set(f.data);
-      if (this.disk.usedBytes() - f.data.length + grown.length > MAX_BYTES) return false;
+      if (disk.usedBytes() - f.data.length + grown.length > MAX_BYTES) return false;
       f.data = grown;
     }
     f.data.set(this.mem.subarray(this.dma, this.dma + 128), off);
@@ -145,7 +169,7 @@ export class Bdos {
   private setSeqRecord(fcb: number, record: number): void {
     this.mem[(fcb + 12) & 0xffff] = (record >> 7) & 0xff;
     this.mem[(fcb + 32) & 0xffff] = record & 0x7f;
-    const f = this.open.get(fcb);
+    const f = this.open.get(fcb)?.file;
     this.mem[(fcb + 15) & 0xffff] = f ? Math.min(128, Disk.extentRecords(f, record >> 7)) : 0;
   }
 
@@ -299,19 +323,20 @@ export class Bdos {
       }
 
       case 14: { // DRV_SET
-        const d = this.cpu.e & 0x0f;
-        if (d !== 0) { this.result(0xff); break; }
-        this.drive = 0;
+        const d = this.cpu.e & 0xff;
+        if (d >= this.drives.length) { this.result(0xff); break; }
+        this.drive = d;
         this.result(0);
         break;
       }
 
       case 15: { // F_OPEN
         const n = this.fcbName(de);
-        if (!this.validDrive(n.drive)) { this.result(0xff); break; }
-        const f = this.disk.find(this.user, n.name, n.ext);
+        const disk = this.target(de);
+        if (!disk) { this.result(0xff); break; }
+        const f = disk.find(this.user, n.name, n.ext);
         if (!f) { this.result(0xff); break; }
-        this.setOpenState(de, f);
+        this.setOpenState(de, f, disk);
         this.result(0);
         break;
       }
@@ -322,8 +347,9 @@ export class Bdos {
 
       case 17: { // F_SFIRST
         const n = this.fcbName(de);
-        if (!this.validDrive(n.drive)) { this.result(0xff); break; }
-        const files = this.disk.search(this.user, n.name, n.ext);
+        const disk = this.target(de);
+        if (!disk) { this.result(0xff); break; }
+        const files = disk.search(this.user, n.name, n.ext);
         this.searchEntries = [];
         for (const f of files) {
           const extents = Disk.extents(f);
@@ -350,13 +376,14 @@ export class Bdos {
 
       case 19: { // F_DELETE
         const n = this.fcbName(de);
-        if (!this.validDrive(n.drive)) { this.result(0xff); break; }
-        const files = this.disk.search(this.user, n.name, n.ext);
+        const disk = this.target(de);
+        if (!disk) { this.result(0xff); break; }
+        const files = disk.search(this.user, n.name, n.ext);
         let any = false;
         for (const f of files) {
           if (f.ro) continue;
-          this.disk.remove(f);
-          for (const [addr, open] of this.open) if (open === f) this.open.delete(addr);
+          disk.remove(f);
+          for (const [addr, open] of this.open) if (open.file === f) this.open.delete(addr);
           any = true;
         }
         this.result(any ? 0 : 0xff);
@@ -364,21 +391,21 @@ export class Bdos {
       }
 
       case 20: { // F_READ
-        const f = this.fileFor(de);
-        if (!f) { this.result(1); break; }
+        const entry = this.fileFor(de);
+        if (!entry) { this.result(1); break; }
         const rec = this.seqRecord(de);
-        if (!this.readRecord(f, rec)) { this.result(1); break; }
+        if (!this.readRecord(entry.file, rec)) { this.result(1); break; }
         this.setSeqRecord(de, rec + 1);
         this.result(0);
         break;
       }
 
       case 21: { // F_WRITE
-        const f = this.fileFor(de);
-        if (!f) { this.result(1); break; }
-        if (f.ro) { this.result(2); break; }
+        const entry = this.fileFor(de);
+        if (!entry) { this.result(1); break; }
+        if (entry.file.ro) { this.result(2); break; }
         const rec = this.seqRecord(de);
-        if (!this.writeRecord(f, rec)) { this.result(2); break; }
+        if (!this.writeRecord(entry.file, rec, entry.disk)) { this.result(2); break; }
         this.setSeqRecord(de, rec + 1);
         this.result(0);
         break;
@@ -386,24 +413,27 @@ export class Bdos {
 
       case 22: { // F_MAKE
         const n = this.fcbName(de);
-        if (!this.validDrive(n.drive)) { this.result(0xff); break; }
-        const f = this.disk.create(this.user, n.name, n.ext);
+        const disk = this.target(de);
+        if (!disk) { this.result(0xff); break; }
+        const f = disk.create(this.user, n.name, n.ext);
         if ('error' in f) { this.result(0xff); break; }
-        this.setOpenState(de, f);
+        this.setOpenState(de, f, disk);
         this.result(0);
         break;
       }
 
       case 23: { // F_RENAME
         const oldName = this.fcbName(de);
+        const disk = this.target(de);
+        if (!disk) { this.result(0xff); break; }
         let nn = '';
         let ne = '';
         for (let i = 0; i < 8; i++) nn += String.fromCharCode(this.mem[(de + 17 + i) & 0xffff] & 0x7f);
         for (let i = 0; i < 3; i++) ne += String.fromCharCode(this.mem[(de + 25 + i) & 0xffff] & 0x7f);
         const newName = padName(nn.trimEnd().toUpperCase());
         const newExt = padExt(ne.trimEnd().toUpperCase());
-        const f = this.disk.find(this.user, oldName.name, oldName.ext);
-        if (!f || this.disk.find(this.user, newName, newExt)) { this.result(0xff); break; }
+        const f = disk.find(this.user, oldName.name, oldName.ext);
+        if (!f || disk.find(this.user, newName, newExt)) { this.result(0xff); break; }
         f.name = newName;
         f.ext = newExt;
         this.result(0);
@@ -411,7 +441,7 @@ export class Bdos {
       }
 
       case 24: // DRV_LOGINVEC
-        this.resultHL(1);
+        this.resultHL((1 << this.drives.length) - 1);
         break;
 
       case 25: // DRV_GET
@@ -438,7 +468,9 @@ export class Bdos {
 
       case 30: { // F_ATTRIB
         const n = this.fcbName(de);
-        const f = this.disk.find(this.user, n.name, n.ext);
+        const disk = this.target(de);
+        if (!disk) { this.result(0xff); break; }
+        const f = disk.find(this.user, n.name, n.ext);
         if (!f) { this.result(0xff); break; }
         f.ro = n.ro;
         f.sys = n.sys;
@@ -474,30 +506,30 @@ export class Bdos {
       }
 
       case 33: { // F_READRAND
-        const f = this.fileFor(de);
-        if (!f) { this.result(1); break; }
+        const entry = this.fileFor(de);
+        if (!entry) { this.result(1); break; }
         const rec = this.randomRecord(de);
-        if (!this.readRecord(f, rec)) { this.result(1); break; }
+        if (!this.readRecord(entry.file, rec)) { this.result(1); break; }
         this.setSeqRecord(de, rec + 1);
         this.result(0);
         break;
       }
 
       case 34: { // F_WRITERAND
-        const f = this.fileFor(de);
-        if (!f) { this.result(1); break; }
-        if (f.ro) { this.result(2); break; }
+        const entry = this.fileFor(de);
+        if (!entry) { this.result(1); break; }
+        if (entry.file.ro) { this.result(2); break; }
         const rec = this.randomRecord(de);
-        if (!this.writeRecord(f, rec)) { this.result(2); break; }
+        if (!this.writeRecord(entry.file, rec, entry.disk)) { this.result(2); break; }
         this.setSeqRecord(de, rec + 1);
         this.result(0);
         break;
       }
 
       case 35: { // F_SIZE
-        const f = this.fileFor(de);
-        if (!f) { this.result(0xff); break; }
-        const records = Math.ceil(f.data.length / 128) & 0xffffff;
+        const entry = this.fileFor(de);
+        if (!entry) { this.result(0xff); break; }
+        const records = Math.ceil(entry.file.data.length / 128) & 0xffffff;
         this.mem[(de + 33) & 0xffff] = records & 0xff;
         this.mem[(de + 34) & 0xffff] = (records >> 8) & 0xff;
         this.mem[(de + 35) & 0xffff] = (records >> 16) & 0xff;
@@ -523,11 +555,11 @@ export class Bdos {
         break;
 
       case 40: { // F_WRITEZF
-        const f = this.fileFor(de);
-        if (!f) { this.result(1); break; }
-        if (f.ro) { this.result(2); break; }
+        const entry = this.fileFor(de);
+        if (!entry) { this.result(1); break; }
+        if (entry.file.ro) { this.result(2); break; }
         const rec = this.randomRecord(de);
-        if (!this.writeRecord(f, rec)) { this.result(2); break; }
+        if (!this.writeRecord(entry.file, rec, entry.disk)) { this.result(2); break; }
         this.setSeqRecord(de, rec + 1);
         this.result(0);
         break;

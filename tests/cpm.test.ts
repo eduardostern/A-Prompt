@@ -148,6 +148,30 @@ describe('CP/M 2.2 machine', () => {
     expect(machine.disk.find(0, '$$$     ', 'SUB')).toBeUndefined();
   });
 
+  it('copies between drives and runs a program from B:', async () => {
+    const { machine, con } = boot();
+    const pip = machine.drives[0].find(0, 'PIP     ', 'COM')!;
+    await machine.runCom(pip, 'PIP B:COPY.TXT=HELLO.ASM');
+    const src = machine.drives[0].find(0, 'HELLO   ', 'ASM')!;
+    const dst = machine.drives[1].find(0, 'COPY    ', 'TXT');
+    expect(dst).toBeTruthy();
+    expect([...dst!.data.slice(0, src.data.length)]).toEqual([...src.data]);
+
+    const hello = machine.drives[0].find(0, 'HELLO   ', 'COM')!;
+    machine.drives[1].put(hello.name, hello.ext, hello.data);
+    await machine.runCom(machine.drives[1].find(0, 'HELLO   ', 'COM')!, 'B:HELLO');
+    expect(con.output).toContain('Hello from CP/M 2.2!');
+
+    await machine.ccp.execute('DIR B:');
+    expect(con.output).toContain('B: HELLO');
+    expect(con.output).toContain('B: COPY');
+
+    await machine.ccp.execute('B:');
+    expect(machine.bdos.drive).toBe(1);
+    await machine.ccp.execute('DIR');
+    expect(con.output).toContain('B: COPY');
+  });
+
   it('dir/rename/user builtins keep the FCB layer consistent', async () => {
     const { machine } = boot();
     await machine.ccp.execute('REN NOVO.TXT=HELLO.ASM');
