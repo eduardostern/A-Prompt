@@ -8,6 +8,8 @@ FCBs and user areas, a console, and a CCP with the classic commands. It runs
 the original Digital Research binaries distributed at
 [cpm.z80.de](http://www.cpm.z80.de).
 
+**Live demo:** <https://a-prompt.stern.workers.dev>
+
 The name comes from CP/M's unmistakable `A>` prompt.
 
 ![A-Prompt terminal](docs/screenshot.png)

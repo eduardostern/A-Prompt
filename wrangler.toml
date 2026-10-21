@@ -1,5 +1,7 @@
 name = "a-prompt"
 compatibility_date = "2026-10-21"
+workers_dev = true
+preview_urls = true
 
 [assets]
 directory = "./dist"
