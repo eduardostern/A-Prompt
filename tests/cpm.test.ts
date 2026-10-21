@@ -33,6 +33,10 @@ class TestConsole implements ConsoleIO {
     return this.queue.shift();
   }
 
+  hasInput(): boolean {
+    return this.queue.length > 0;
+  }
+
   feed(text: string): void {
     for (const ch of text) this.queue.push(ch.charCodeAt(0));
   }
@@ -228,5 +232,90 @@ describe('CP/M 2.2 machine', () => {
     await machine.ccp.execute('USER 3');
     expect(machine.bdos.user).toBe(3);
     expect(displayName(machine.disk.find(0, 'NOVO    ', 'TXT')!)).toBe('NOVO.TXT');
+  });
+});
+
+describe('CP/M 2.2 compatibility', () => {
+  const CALL5 = [0xcd, 0x05, 0x00];
+  const bdos = (fn: number, de: number) => [0x0e, fn, 0x11, de & 0xff, de >> 8, ...CALL5];
+
+  async function run(machine: CpmMachine, code: number[], line = 'PROBE'): Promise<void> {
+    const f = machine.disk.put('PROBE', 'COM', new Uint8Array(code));
+    await machine.runCom(f!, line);
+  }
+
+  it('BDOS 6 with E=FFh returns 0 when no key is waiting', async () => {
+    const { machine } = boot();
+    await run(machine, [0x0e, 0x06, 0x1e, 0xff, ...CALL5, 0x32, 0x00, 0x02, 0xc9]);
+    expect(machine.mem[0x0200]).toBe(0);
+  });
+
+  it('console status does not swallow the pending key', async () => {
+    const { machine, con } = boot();
+    con.feed('Q');
+    await run(machine, [...bdos(11, 0), ...bdos(1, 0), 0x32, 0x00, 0x02, 0xc9]);
+    expect(machine.mem[0x0200]).toBe(0x51);
+  });
+
+  it('resets DMA to 0080h before each program', async () => {
+    const { machine } = boot();
+    machine.disk.put('T', 'DAT', new Uint8Array(128).fill(0x41));
+    await run(machine, [...bdos(26, 0x3000), 0xc9]);
+    machine.mem.fill(0, 0x80, 0x100);
+    await run(machine, [...bdos(15, 0x5c), ...bdos(20, 0x5c), 0xc9], 'PROBE T.DAT');
+    expect(machine.mem[0x80]).toBe(0x41);
+  });
+
+  it('rereads the last random record on the next sequential read', async () => {
+    const { machine } = boot();
+    const data = new Uint8Array(512);
+    for (let r = 0; r < 4; r++) data.fill(r, r * 128, r * 128 + 128);
+    machine.disk.put('R', 'DAT', data);
+    await run(machine, [
+      ...bdos(15, 0x5c),
+      0x21, 0x7d, 0x00, 0x36, 0x02, // R0 = 2
+      ...bdos(33, 0x5c),
+      ...bdos(26, 0x3000),
+      ...bdos(20, 0x5c),
+      0xc9,
+    ], 'PROBE R.DAT');
+    expect(machine.mem[0x3000]).toBe(2);
+  });
+
+  it('keeps the BIOS and system data above the TPA', async () => {
+    const { machine, con } = boot();
+    const tpaTop = machine.mem[6] | (machine.mem[7] << 8);
+    const bios = machine.mem[1] | (machine.mem[2] << 8);
+    expect(bios).toBeGreaterThan(tpaTop);
+    // Fill the whole TPA below the BDOS with HALT, then call BIOS CONOUT via 0001h.
+    const code = [
+      0x2a, 0x06, 0x00,             // LHLD 0006h
+      0x2b,                         // DCX H
+      0x36, 0x76,                   // loop: MVI M,76h
+      0x2b,                         // DCX H
+      0x7c, 0xfe, 0x10,             // MOV A,H / CPI 10h
+      0xc2, 0x04, 0x01,             // JNZ loop
+      0x2a, 0x01, 0x00,             // LHLD 0001h
+      0x11, 0x09, 0x00, 0x19,       // HL = CONOUT
+      0x0e, 0x58,                   // MVI C,'X'
+      0x11, 0x1c, 0x01, 0xd5, 0xe9, // push return, PCHL
+      0x00,
+      0xc9,                         // 011Ch: RET
+    ];
+    await run(machine, code);
+    expect(con.output).toContain('X');
+  });
+
+  it('does not reuse a cached file when the FCB names another file', async () => {
+    const { machine } = boot();
+    machine.disk.put('A', 'DAT', new Uint8Array(128));
+    machine.disk.put('B', 'DAT', new Uint8Array(1024));
+    await run(machine, [
+      ...bdos(15, 0x5c),
+      0x3e, 0x42, 0x32, 0x5d, 0x00, // FCB name -> B.DAT
+      ...bdos(35, 0x5c),
+      0xc9,
+    ], 'PROBE A.DAT');
+    expect(machine.mem[0x7d]).toBe(8);
   });
 });

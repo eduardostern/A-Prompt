@@ -18,6 +18,7 @@ class TestConsole implements ConsoleIO {
   }
   async readByte(): Promise<number> { return this.queue.shift() ?? 0x1a; }
   pollByte(): number | undefined { return this.queue.shift(); }
+  hasInput(): boolean { return this.queue.length > 0; }
 }
 
 function file(name: string, ext: string, bytes: number[]) {
@@ -75,22 +76,22 @@ describe('CP/M disk images', () => {
 
     const code = new Uint8Array([
       0x1e, 0x01,             // MVI E,1 (drive B)
-      0xcd, 0x1b, 0xf0,       // CALL SELDSK
+      0xcd, 0x1b, 0xfe,       // CALL SELDSK
       0x01, 0x00, 0x00,       // LXI B,0
-      0xcd, 0x1e, 0xf0,       // CALL SETTRK
+      0xcd, 0x1e, 0xfe,       // CALL SETTRK
       0x01, 0x00, 0x00,       // LXI B,0
-      0xcd, 0x21, 0xf0,       // CALL SETSEC
+      0xcd, 0x21, 0xfe,       // CALL SETSEC
       0x01, 0x00, 0x02,       // LXI B,0200h
-      0xcd, 0x24, 0xf0,       // CALL SETDMA
-      0xcd, 0x27, 0xf0,       // CALL READ
+      0xcd, 0x24, 0xfe,       // CALL SETDMA
+      0xcd, 0x27, 0xfe,       // CALL READ
       0x32, 0x00, 0x03,       // STA 0300h
       0x3e, 0xcd,             // MVI A,CDh
       0x32, 0x00, 0x02,       // STA 0200h
       0x01, 0x01, 0x00,       // LXI B,1
-      0xcd, 0x21, 0xf0,       // CALL SETSEC
+      0xcd, 0x21, 0xfe,       // CALL SETSEC
       0x01, 0x00, 0x02,       // LXI B,0200h
-      0xcd, 0x24, 0xf0,       // CALL SETDMA
-      0xcd, 0x2a, 0xf0,       // CALL WRITE
+      0xcd, 0x24, 0xfe,       // CALL SETDMA
+      0xcd, 0x2a, 0xfe,       // CALL WRITE
       0x32, 0x01, 0x03,       // STA 0301h
       0xc9,                   // RET
     ]);

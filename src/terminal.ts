@@ -154,6 +154,10 @@ export class XtermConsole implements ConsoleIO {
     return this.queue.shift();
   }
 
+  hasInput(): boolean {
+    return this.queue.length > 0;
+  }
+
   clear(): void {
     this.term.clear();
   }

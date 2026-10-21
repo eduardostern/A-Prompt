@@ -2,6 +2,7 @@ import type { CpmMachine } from './machine';
 import type { Disk } from './disk';
 import { displayName, parseName, padName, padExt } from './disk';
 import { readConsoleLine } from '../console';
+import { MAX_COM_BYTES } from './layout';
 
 const BUILTINS = ['DIR', 'ERA', 'TYPE', 'REN', 'USER', 'SAVE', 'CLS', 'HELP', 'EXIT', 'XSUB', 'DATE'];
 
@@ -128,7 +129,7 @@ export class Ccp {
       this.console.write(`${cmd}?\r\n`);
       return;
     }
-    if (file.data.length > 0xfa00) {
+    if (file.data.length > MAX_COM_BYTES) {
       this.console.write('PROGRAM TOO LARGE\r\n');
       return;
     }

@@ -4,18 +4,18 @@ import { Bdos } from './bdos';
 import { Ccp } from './ccp';
 import { ConsoleIO, WarmBoot } from '../console';
 
-export const BDOS_ENTRY = 0xfe00;
-const TRAP_BASE = 0xfd00;
-const BIOS_BASE = 0xf000;
-const BIOS_ENTRIES = 17;
+import {
+  ALV_ADDR, ALV_BYTES, BDOS_ENTRY, BIOS_BASE, BIOS_ENTRIES, CCP_STACK,
+  DIRBUF_ADDR, DPB_ADDR, DPH_ADDR, TRAP_BASE,
+} from './layout';
 
-const initialStack = 0xfc00;
+export { BDOS_ENTRY };
 
 /**
  * A CP/M 2.2 machine: Z80 + 64K + drive A: + BDOS + CCP.
  *
  * The guest sees the classic memory map: zero page with a JMP at 0005h, the
- * BIOS jump table at F000h, and the BDOS in the top page.  Calls into the BDOS
+ * BDOS entry at FC06h and the BIOS above it (see layout.ts).  Calls into the BDOS
  * and the BIOS are intercepted by the host so they can be implemented in
  * TypeScript and, where needed, await keyboard input.
  */
@@ -57,7 +57,8 @@ export class CpmMachine {
     const m = this.mem;
     m.fill(0);
     // 0000h: JMP BIOS WBOOT.  0005h: JMP BDOS entry.  0006h: BDOS base.
-    m[0x0000] = 0xc3; m[0x0001] = 0x03; m[0x0002] = 0xf0;
+    const wboot = BIOS_BASE + 3;
+    m[0x0000] = 0xc3; m[0x0001] = wboot & 0xff; m[0x0002] = wboot >> 8;
     m[0x0005] = 0xc3; m[0x0006] = BDOS_ENTRY & 0xff; m[0x0007] = BDOS_ENTRY >> 8;
     m[0x0003] = 0; // IOBYTE
     m[0x0004] = 0; // current drive
@@ -135,10 +136,10 @@ export class CpmMachine {
   private buildDph(disk: Disk): number {
     const image = disk.image!;
     const m = this.mem;
-    const dpb = 0xfd40;
-    const dph = 0xfb00;
-    const dirbuf = 0xfb10;
-    const alv = 0xfd50;
+    const dpb = DPB_ADDR;
+    const dph = DPH_ADDR;
+    const dirbuf = DIRBUF_ADDR;
+    const alv = ALV_ADDR;
     m.set(image.dpb(), dpb);
     const d = new Uint8Array(16);
     const put = (off: number, value: number) => {
@@ -153,7 +154,7 @@ export class CpmMachine {
     put(14, alv);
     m.set(d, dph);
     m.fill(0, dirbuf, dirbuf + 128);
-    m.fill(0, alv, alv + Math.ceil((image.geometry.dsm + 1) / 8));
+    m.fill(0, alv, alv + Math.min(ALV_BYTES, Math.ceil((image.geometry.dsm + 1) / 8)));
     return dph;
   }
 
@@ -199,9 +200,11 @@ export class CpmMachine {
 
     m.set(file.data, 0x0100);
     m[0x0004] = this.bdos.drive & 0x0f;
+    // Like the real CCP: every program starts with DMA at 0080h and no open files.
+    this.bdos.startProgram();
 
     const cpu = this.cpu;
-    cpu.sp = initialStack;
+    cpu.sp = CCP_STACK;
     cpu.pc = 0x0000;
     // Push a return address of 0000h: RET from the program warm boots via WBOOT.
     cpu.sp = (cpu.sp - 1) & 0xffff; m[cpu.sp] = 0x00;
@@ -281,7 +284,7 @@ export class CpmMachine {
         this.warm = true;
         return true;
       case 2: // CONST
-        cpu.a = this.console.pollByte() !== undefined ? 0xff : 0x00;
+        cpu.a = this.console.hasInput() ? 0xff : 0x00;
         break;
       case 3: // CONIN
         cpu.a = await this.console.readByte();

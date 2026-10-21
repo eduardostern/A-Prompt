@@ -1,6 +1,7 @@
 import type { Z80 } from '../z80';
 import { Disk, CpmFile, padName, padExt, MAX_BYTES } from './disk';
 import { ConsoleIO, WarmBoot } from '../console';
+import { ALV_ADDR, ALV_BYTES, DPB_ADDR } from './layout';
 
 type SearchEntry = { file: CpmFile; extent: number };
 type OpenFile = { file: CpmFile; disk: Disk };
@@ -49,6 +50,14 @@ export class Bdos {
     this.rtcStamp = null;
     this.printerLog.length = 0;
     this.serialLog.length = 0;
+  }
+
+  /** State the CCP resets before running each program. */
+  startProgram(): void {
+    this.dma = 0x0080;
+    this.open.clear();
+    this.searchEntries = [];
+    this.searchIndex = 0;
   }
 
   /** CP/M 3 style 4-byte time stamp: day word, hour, minute. */
@@ -103,7 +112,7 @@ export class Bdos {
   }
 
   private hasConsoleInput(): boolean {
-    return this.con.pollByte() !== undefined || this.hasXsubInput();
+    return this.con.hasInput() || this.hasXsubInput();
   }
 
   /** Loads the next queued line from $$$.SUB into the XSUB buffer. */
@@ -185,11 +194,17 @@ export class Bdos {
     return d === 0 || (d >= 1 && d <= this.drives.length);
   }
   private fileFor(fcb: number): OpenFile | undefined {
-    const open = this.open.get(fcb);
-    if (open) return open;
     const n = this.fcbName(fcb);
     const disk = this.target(fcb);
     if (!disk) return undefined;
+    // The cache is keyed by FCB address; only trust it while that FCB still
+    // names the same file (programs reuse FCBs for different files).
+    const open = this.open.get(fcb);
+    if (open && open.disk === disk && open.file.name === n.name && open.file.ext === n.ext &&
+        open.file.user === this.user && disk.files.includes(open.file)) {
+      return open;
+    }
+    this.open.delete(fcb);
     const found = disk.find(this.user, n.name, n.ext);
     if (!found) return undefined;
     const entry = { file: found, disk };
@@ -306,8 +321,10 @@ export class Bdos {
       case 6: { // C_RAWIO
         const e = this.cpu.e;
         if (e === 0xff) {
-          const ch = await this.readChar();
-          this.result(ch);
+          // Non-blocking: returns 0 when no key is waiting.
+          if (this.xsub && !this.xsubLine.length) this.loadXsubLine();
+          const ch = this.xsubLine.length ? this.xsubLine.shift()! : this.con.pollByte();
+          this.result(ch ?? 0);
         } else if (e === 0xfe) {
           this.result(this.hasConsoleInput() ? 0xff : 0);
         } else {
@@ -533,8 +550,8 @@ export class Bdos {
         break;
 
       case 27: // DRV_ALLOCVEC
-        this.resultHL(0xfd50);
-        this.mem.fill(0, 0xfd50, 0xfe00);
+        this.resultHL(ALV_ADDR);
+        this.mem.fill(0, ALV_ADDR, ALV_ADDR + ALV_BYTES);
         break;
 
       case 28: // DRV_SETRO
@@ -559,7 +576,7 @@ export class Bdos {
       }
 
       case 31: { // DRV_DPB
-        const dpb = 0xfd40;
+        const dpb = DPB_ADDR;
         const current = this.currentDisk();
         if (current.image) {
           this.mem.set(current.image.dpb(), dpb);
@@ -595,8 +612,10 @@ export class Bdos {
         const entry = this.fileFor(de);
         if (!entry) { this.result(1); break; }
         const rec = this.randomRecord(de);
+        if (rec > 0xffff) { this.result(6); break; }
         if (!this.readRecord(entry.file, rec)) { this.result(1); break; }
-        this.setSeqRecord(de, rec + 1);
+        // CP/M 2.2 leaves the FCB on this record: the next sequential read rereads it.
+        this.setSeqRecord(de, rec);
         this.result(0);
         break;
       }
@@ -606,8 +625,9 @@ export class Bdos {
         if (!entry) { this.result(1); break; }
         if (entry.file.ro) { this.result(2); break; }
         const rec = this.randomRecord(de);
+        if (rec > 0xffff) { this.result(6); break; }
         if (!this.writeRecord(entry.file, rec, entry.disk)) { this.result(2); break; }
-        this.setSeqRecord(de, rec + 1);
+        this.setSeqRecord(de, rec);
         this.result(0);
         break;
       }
@@ -645,8 +665,9 @@ export class Bdos {
         if (!entry) { this.result(1); break; }
         if (entry.file.ro) { this.result(2); break; }
         const rec = this.randomRecord(de);
+        if (rec > 0xffff) { this.result(6); break; }
         if (!this.writeRecord(entry.file, rec, entry.disk)) { this.result(2); break; }
-        this.setSeqRecord(de, rec + 1);
+        this.setSeqRecord(de, rec);
         this.result(0);
         break;
       }

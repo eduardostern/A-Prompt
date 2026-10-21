@@ -5,8 +5,10 @@ export interface ConsoleIO {
   writeByte(code: number): void;
   /** Waits for one raw byte (keyboard). Resolves to 0x1A if the console closes. */
   readByte(): Promise<number>;
-  /** Returns the next pending byte without blocking, if any. */
+  /** Returns and consumes the next pending byte without blocking, if any. */
   pollByte(): number | undefined;
+  /** True when a byte is waiting. Does not consume it. */
+  hasInput(): boolean;
   /** Last byte written, used to avoid double line breaks. */
   lastByte: number;
   /** Terminal width in columns (CP/M assumes 80). */
