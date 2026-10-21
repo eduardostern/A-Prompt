@@ -40,6 +40,8 @@ There is no backend and no WebAssembly: `dist/` is a plain static site.
 - **CCP**: `DIR`, `ERA`, `TYPE`, `REN`, `USER`, `SAVE`, `CLS`, `HELP`, drive
   selection (A:–D:), and `.COM` execution with command tail and default FCBs.
 - **Real `SUBMIT`**: the CCP consumes `$$$.SUB` one record at a time.
+- **Terminal profiles**: ANSI/VT100, ADM-3A and VT52 escape-sequence
+  translation, with CP437 character mapping.
 - **Upload/download** from the drive panel; drives A:–D: (4 MB each, 16K
   blocks) are persisted in the browser's `localStorage`.
 
@@ -105,8 +107,8 @@ visitor's browser (`localStorage`), so every visitor has their own drive A:.
 - CP/M 2.2 only (not CP/M 3); no clock, serial or printer.
 - `XSUB` is not included: programs that read the keyboard during a `SUBMIT`
   receive input from the terminal.
-- The screen is the browser terminal; software that requires a specific
-  terminal (ADM-3A, VT52, etc.) may render oddly.
+- Terminal profiles cover ANSI/VT100, ADM-3A and VT52; software that requires
+  another terminal (Hazeltine, Televideo, Wyse, etc.) may render oddly.
 
 ## Architecture
 

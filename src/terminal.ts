@@ -2,6 +2,7 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import type { ConsoleIO } from './console';
+import { TerminalTranslator, TerminalType } from './terminal-translator';
 
 /** CP437 (the character set CP/M software was written for) to Unicode. */
 const CP437 =
@@ -15,6 +16,7 @@ export class XtermConsole implements ConsoleIO {
   private queue: number[] = [];
   private waiter: (() => void) | null = null;
   private closed = false;
+  private translator = new TerminalTranslator('ansi');
   lastByte = 10;
 
   onActivity?: () => void;
@@ -85,6 +87,14 @@ export class XtermConsole implements ConsoleIO {
     return this.term.cols;
   }
 
+  get terminalType(): TerminalType {
+    return this.translator.type;
+  }
+
+  setTerminalType(type: TerminalType): void {
+    this.translator.setType(type);
+  }
+
   focus(): void {
     this.term.focus();
   }
@@ -107,6 +117,17 @@ export class XtermConsole implements ConsoleIO {
   writeByte(code: number): void {
     code &= 0xff;
     this.lastByte = code;
+    if (this.translator.type !== 'ansi') {
+      const out = this.translator.feed(code);
+      if (typeof out === 'number') this.writeRawByte(out);
+      else if (out) this.term.write(out);
+      for (const b of this.translator.takeResponse()) this.push(b);
+      return;
+    }
+    this.writeRawByte(code);
+  }
+
+  private writeRawByte(code: number): void {
     switch (code) {
       case 0x0d: this.term.write('\r'); break;
       case 0x0a: this.term.write('\n'); break;

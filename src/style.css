@@ -170,6 +170,27 @@ body::after {
 
 .panel-status { display: inline-flex; align-items: center; gap: 8px; }
 
+.panel-tools { display: flex; align-items: center; gap: 14px; }
+
+.terminal-select {
+  appearance: none;
+  padding: 4px 20px 4px 7px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background:
+    linear-gradient(45deg, transparent 50%, var(--muted) 50%) calc(100% - 10px) 50% / 4px 4px no-repeat,
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%) calc(100% - 6px) 50% / 4px 4px no-repeat,
+    #0b1510;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0;
+  text-transform: none;
+  cursor: pointer;
+}
+
+.terminal-select:hover, .terminal-select:focus { color: var(--green); border-color: var(--line-2); outline: none; }
+
 .led {
   width: 7px;
   height: 7px;

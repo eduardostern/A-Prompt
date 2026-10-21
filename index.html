@@ -29,7 +29,14 @@
         <section class="console-panel" aria-label="CP/M terminal">
           <div class="panel-bar">
             <span class="panel-title" id="console-drive">Console · A:</span>
-            <span class="panel-status"><i id="led" class="led"></i><span id="status-text">BOOTING</span></span>
+            <div class="panel-tools">
+              <select id="terminal-type" class="terminal-select" aria-label="Terminal emulation" title="Terminal emulation">
+                <option value="ansi">ANSI / VT100</option>
+                <option value="adm3a">ADM-3A</option>
+                <option value="vt52">VT52</option>
+              </select>
+              <span class="panel-status"><i id="led" class="led"></i><span id="status-text">BOOTING</span></span>
+            </div>
           </div>
 
           <div class="terminal-wrap">

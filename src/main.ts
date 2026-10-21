@@ -1,5 +1,6 @@
 import './style.css';
 import { XtermConsole } from './terminal';
+import type { TerminalType } from './terminal-translator';
 import { CpmMachine } from './cpm/machine';
 import { BUILTIN_FILES } from './assets/builtin-programs';
 import type { Disk } from './cpm/disk';
@@ -7,6 +8,7 @@ import { CpmFile, MAX_BYTES, displayName, padExt, padName, trimName } from './cp
 
 const LS_PREFIX = 'a-prompt.drive.';
 const LEGACY_LS_KEY = 'a-prompt.drive.v1';
+const TERM_KEY = 'a-prompt.terminal';
 const MAX_UPLOAD = 512 * 1024;
 
 const letterFor = (index: number): string => String.fromCharCode(65 + index);
@@ -132,6 +134,7 @@ const fileList = el<HTMLUListElement>('file-list');
 const driveTabs = el<HTMLDivElement>('drive-tabs');
 const driveTitle = el('drive-title');
 const consoleDrive = el('console-drive');
+const terminalSelect = el<HTMLSelectElement>('terminal-type');
 const usage = el('usage');
 const usageBar = el<HTMLDivElement>('usage-bar');
 const led = el('led');
@@ -362,6 +365,22 @@ driveTabs.addEventListener('click', (ev) => {
   con.focus();
 });
 
+function applyTerminalType(type: string, persist = true): void {
+  const valid: TerminalType[] = ['ansi', 'adm3a', 'vt52'];
+  if (!valid.includes(type as TerminalType)) return;
+  con.setTerminalType(type as TerminalType);
+  terminalSelect.value = type;
+  if (persist) {
+    try {
+      localStorage.setItem(TERM_KEY, type);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+terminalSelect.addEventListener('change', () => applyTerminalType(terminalSelect.value));
+
 resetBtn.addEventListener('click', () => {
   if (machine.busy) return;
   const letter = letterFor(activeDrive);
@@ -421,6 +440,7 @@ consolePanel.addEventListener('click', (e) => {
 
 loadBuiltins();
 for (let i = 0; i < drives.length; i++) restoreDrive(i);
+applyTerminalType(localStorage.getItem(TERM_KEY) ?? 'ansi', false);
 renderFiles();
 applyFontSize();
 statusText.textContent = 'READY';
