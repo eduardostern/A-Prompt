@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.playwright-cli/
+downloads/
+upload-test/
+coverage/
+.env
+.env.*
+*.log
+.DS_Store

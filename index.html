@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="A-Prompt — a CP/M 2.2 emulator with an original Z80 CPU core, running entirely in the browser." />
+    <meta name="theme-color" content="#070b09" />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <title>A-Prompt · CP/M 2.2 emulator for the browser</title>
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="brand">
+          <div class="logo" aria-hidden="true">A&gt;<span>CP/M 2.2</span></div>
+          <div class="brand-text">
+            <h1>A-Prompt</h1>
+            <p>A CP/M 2.2 emulator · Z80 · 64 KB · drive A: with Digital Research tools</p>
+          </div>
+        </div>
+        <nav class="topnav">
+          <a href="http://www.cpm.z80.de" target="_blank" rel="noreferrer">cpm.z80.de ↗</a>
+          <a href="#about">About</a>
+        </nav>
+      </header>
+
+      <main class="layout">
+        <section class="console-panel" aria-label="CP/M terminal">
+          <div class="panel-bar">
+            <span class="panel-title">Console · A:</span>
+            <span class="panel-status"><i id="led" class="led"></i><span id="status-text">BOOTING</span></span>
+          </div>
+
+          <div class="terminal-wrap">
+            <div id="terminal" class="terminal"></div>
+          </div>
+
+          <div class="panel-foot">
+            <span class="mono">Z80 · 64K · TPA 0100h–FBFFh</span>
+            <span id="foot-hint">Ctrl+C interrupts · type HELP</span>
+          </div>
+        </section>
+
+        <aside class="sidebar">
+          <section class="card drive-card">
+            <div class="card-head">
+              <h2>Drive A:</h2>
+              <span id="usage" class="usage">0 / 4 MB</span>
+            </div>
+            <div class="meter" aria-hidden="true"><div id="usage-bar"></div></div>
+            <ul id="file-list" class="file-list" aria-label="Files on drive A"></ul>
+
+            <div id="dropzone" class="dropzone">
+              <input id="file-input" type="file" multiple hidden />
+              <button id="upload-btn" class="btn btn-primary" type="button">Import files</button>
+              <p>or drop <b>.COM</b>, <b>.TXT</b>, <b>.SUB</b> here</p>
+            </div>
+
+            <button id="reset-btn" class="btn btn-ghost" type="button">Restore original drive</button>
+          </section>
+
+          <section class="card">
+            <h2>Shortcuts</h2>
+            <div class="chips">
+              <button class="chip" data-cmd="HELP" type="button">HELP</button>
+              <button class="chip" data-cmd="DIR" type="button">DIR</button>
+              <button class="chip" data-cmd="HELLO" type="button">RUN HELLO</button>
+              <button class="chip" data-cmd="STAT" type="button">STAT</button>
+              <button class="chip" data-cmd="TYPE HELLO.ASM" type="button">TYPE .ASM</button>
+              <button class="chip" data-cmd="CLS" type="button">CLS</button>
+            </div>
+          </section>
+
+          <section class="card about" id="about">
+            <h2>About</h2>
+            <p>
+              A real CP/M 2.2 underneath: a complete Z80 CPU, BDOS with 8.3
+              files, FCBs, user areas and console, plus a browser-hosted CCP.
+              The DRI binaries come from
+              <a href="http://www.cpm.z80.de" target="_blank" rel="noreferrer">cpm.z80.de</a>
+              and are distributed under the CP/M license.
+            </p>
+            <p class="muted">
+              Raw sector I/O (physical disks) is not emulated. Everything runs
+              in memory; uploads are saved in this browser.
+            </p>
+          </section>
+        </aside>
+      </main>
+
+      <footer class="footer">
+        <span>A-Prompt · pure TypeScript · original Z80 core</span>
+        <span class="mono">CP/M 2.2 · 1979 · Digital Research</span>
+      </footer>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

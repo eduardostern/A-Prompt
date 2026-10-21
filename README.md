@@ -1,0 +1,121 @@
+# A-Prompt
+
+[![CI](https://github.com/eduardostern/A-Prompt/actions/workflows/ci.yml/badge.svg)](https://github.com/eduardostern/A-Prompt/actions/workflows/ci.yml)
+
+**A-Prompt** is a CP/M 2.2 emulator for the browser, written from scratch in
+TypeScript. Under the hood: a complete **Z80 CPU**, a BDOS with 8.3 files,
+FCBs and user areas, a console, and a CCP with the classic commands. It runs
+the original Digital Research binaries distributed at
+[cpm.z80.de](http://www.cpm.z80.de).
+
+The name comes from CP/M's unmistakable `A>` prompt.
+
+![A-Prompt terminal](docs/screenshot.png)
+
+## Run
+
+```bash
+npm install
+npm run dev      # http://localhost:5173
+npm run build    # static site in dist/
+npm run preview  # serve the build
+```
+
+There is no backend and no WebAssembly: `dist/` is a plain static site.
+
+## What works
+
+- **Z80 CPU**: documented and undocumented instructions (SLL, IXH/IXL, DDCB,
+  ED block ops, etc.). Passes `zexdoc` and `zexall` (all groups OK).
+- **CP/M 2.2**: console, FCBs, sequential and random files, directory search,
+  rename, attributes, user areas 0–15, DMA and DPB.
+- **CCP**: `DIR`, `ERA`, `TYPE`, `REN`, `USER`, `SAVE`, `CLS`, `HELP`, drive
+  selection, and `.COM` execution with command tail and default FCBs.
+- **Real `SUBMIT`**: the CCP consumes `$$$.SUB` one record at a time.
+- **Upload/download** from the drive panel; drive A: (4 MB, 16K blocks) is
+  persisted in the browser's `localStorage`.
+
+Bundled programs: **PIP**, **STAT**, **DDT**, **ED**, **ASM**, **LOAD**,
+**SUBMIT**, **DUMP**, **HELLO.COM**, plus a **DEMO.SUB**.
+
+```text
+A>DIR
+A>HELLO
+A>STAT
+A>ED HELLO.ASM
+A>ASM HELLO.ASM
+A>LOAD HELLO
+A>SUBMIT DEMO
+```
+
+## Deploy on Cloudflare Pages
+
+A-Prompt is a static site: no server, no environment variables, no database.
+The whole CP/M disk image is embedded in the JavaScript bundle.
+
+**Dashboard**
+
+1. Push the repository to GitHub/GitLab.
+2. In Cloudflare Pages, choose **Connect to Git** and select the repo.
+3. Framework preset: **None** (or **Vite**).
+4. Build command: `npm run build`
+5. Build output directory: `dist`
+6. Node version: 22 (the repo includes `.nvmrc`).
+
+**CLI**
+
+```bash
+npm run build
+npx wrangler pages deploy dist
+```
+
+`wrangler.toml` already points to `dist` as the build output, so
+`npx wrangler pages deploy` also works without arguments. Uploads and files
+created inside CP/M are stored in the visitor's browser (`localStorage`), so
+each visitor has their own drive A:.
+
+## Limitations
+
+- Drive **A:** only; no raw sector I/O (BIOS READ/WRITE). Software that talks
+  to physical disks (FORMAT, DSKMAINT) will not work.
+- CP/M 2.2 only (not CP/M 3); no clock, serial or printer.
+- `XSUB` is not included: programs that read the keyboard during a `SUBMIT`
+  receive input from the terminal.
+- The screen is the browser terminal; software that requires a specific
+  terminal (ADM-3A, VT52, etc.) may render oddly.
+
+## Architecture
+
+| File | Role |
+| --- | --- |
+| `src/z80.ts` | Z80 interpreter: flags, prefixes, approximate cycles |
+| `src/cpm/disk.ts` | In-memory drive, 8.3 names, wildcards, user areas |
+| `src/cpm/bdos.ts` | BDOS calls (`CALL 5`) and CP/M directory |
+| `src/cpm/ccp.ts` | Shell, FCB parsing, `SUBMIT` |
+| `src/cpm/machine.ts` | Memory map, BDOS/BIOS traps, execution loop |
+| `src/terminal.ts` | xterm.js + CP437 + keyboard |
+
+The memory map is the classic one: `0000h` jumps to the BIOS, `0005h` to the
+BDOS at `FE00h`, and the BIOS jump table lives at `F000h`. Calls are
+intercepted on the host, which lets the BDOS wait for keyboard input without
+blocking the UI.
+
+## Tests
+
+```bash
+npm test                   # CP/M + Z80 tests (fast)
+ZEX=1 npm test             # adds the zexdoc/zexall exercisers (long)
+```
+
+`zexdoc`/`zexall` are Frank Cringle's Z80 instruction exercisers (public
+domain) and live in `tests/fixtures/`.
+
+## Credits and license
+
+- Emulator code: MIT (`LICENSE`).
+- CP/M binaries: © Digital Research, redistributed under the license granted
+  by DRDOS, Inc. / Bryan Sparks, available at
+  [cpm.z80.de/license.html](http://www.cpm.z80.de/license.html).
+- `HELLO.COM`, `HELLO.ASM` and `DEMO.SUB` are original examples for this
+  project.
+- xterm.js is © its authors, MIT license.

@@ -1,0 +1,23 @@
+{
+  "name": "a-prompt",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "A-Prompt — a CP/M 2.2 emulator with an original Z80 CPU core for the browser",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "embed": "node scripts/embed-programs.mjs"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/xterm": "^5.5.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vite": "^6.0.0",
+    "vitest": "^2.1.5"
+  }
+}
