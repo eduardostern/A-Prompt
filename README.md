@@ -42,27 +42,36 @@ There is no backend and no WebAssembly: `dist/` is a plain static site.
 
 The terminal fills the viewport. Use **Panels** in the console toolbar to hide or show the right rail; its sections collapse and scroll independently (on mobile the rail becomes a drawer).
 
+The clock menu in the toolbar sets the Z80 speed: **2**, **4** (default) or
+**8 MHz**, or **Max** to run as fast as your computer allows. Period speed
+keeps games with timing loops playable. **Reset** stops a runaway program
+(drives are kept).
+
 ## What works
 
 - **Z80 CPU**: documented and undocumented instructions (SLL, IXH/IXL, DDCB,
-  ED block ops, etc.). Passes `zexdoc` and `zexall` (all groups OK).
+  ED block ops, etc.). Passes `zexdoc` and `zexall` (all groups OK). T-states
+  follow the Zilog tables and drive the clock limit.
 - **CP/M 2.2**: console, FCBs, sequential and random files, directory search,
   rename, attributes, user areas 0–15, DMA and DPB.
 - **CCP**: `DIR`, `ERA`, `TYPE`, `REN`, `USER`, `SAVE`, `CLS`, `HELP`, drive
   selection (A:–D:), and `.COM` execution with command tail and default FCBs.
-- **Real `SUBMIT`**: the CCP consumes `$$$.SUB` one record at a time;
-  **`XSUB`** feeds the remaining lines to programs that read the console.
+- **Real `SUBMIT`**: the CCP consumes `$$$.SUB` one record at a time, also
+  after the batch changes drive or user area; **`XSUB`** feeds the remaining
+  lines to programs that read the console.
 - **Terminal profiles**: ANSI/VT100, ADM-3A and VT52 escape-sequence
   translation, with CP437 character mapping.
-- **Disk images**: mount/export raw 8" SSSD (77×26), 512K and 4MB
-  `.dsk`/`.img` images. BIOS sector I/O (`SELDSK`, `SETTRK`, `SETSEC`,
-  `SETDMA`, `READ`, `WRITE`, `SECTRAN`) and a CP/M 2.2 filesystem are
-  implemented, so tools like FORMAT and DSKMAINT can work on mounted images.
+- **Disk images**: mount/export raw 8" SSSD (77×26, standard skew 6 as in
+  cpmtools' `ibm-3740` and z80pack), 512K and 4MB `.dsk`/`.img` images.
+  BIOS sector I/O (`SELDSK`, `SETTRK`, `SETSEC`, `SETDMA`, `READ`, `WRITE`,
+  `SECTRAN`) and a CP/M 2.2 filesystem are implemented, so tools like FORMAT
+  and DSKMAINT can work on mounted images.
 - **Clock and devices**: virtual clock via CP/M 3-style `T_GET`/`T_SET`
   (BDOS 104/105) and `DATE`; printer/serial bytes captured to downloadable
   logs (BDOS 4/5 and BIOS LIST/PUNCH).
-- **Upload/download** from the drive panel; drives A:–D: (4 MB each, 16K
-  blocks) are persisted in the browser's `localStorage`.
+- **Upload/download** from the drive panel; drives A:–D: (4 MB each, 2K
+  blocks, 1024 directory entries, so `STAT` shows real free space) are
+  persisted in the browser's `localStorage`.
 
 Bundled programs: **PIP**, **STAT**, **DDT**, **ED**, **ASM**, **LOAD**,
 **SUBMIT**, **DUMP**, **HELLO.COM**, **INPUT.COM**, plus **DEMO.SUB** and
@@ -289,6 +298,13 @@ one into a raw 8" image, then **Mount .dsk** on any drive to work with raw
 sectors. The image panel supports 8" SSSD (77 tracks × 26 sectors), 512K and
 4MB images; the CP/M filesystem is decoded and rebuilt automatically.
 
+8" images use the standard IBM 3740 layout (skew 6), so disks from cpmtools
+(`ibm-3740`) and z80pack mount directly, and exported images open there.
+Images exported by earlier A-Prompt versions (unskewed) are recognised and
+still read correctly. BIOS sector numbers are logical (0-based, `SECTRAN` is
+1:1); the skew is applied when sectors are stored. A program that writes more
+than the image holds gets a "disk full" error instead of losing data.
+
 With an image mounted, `FORMAT`, `DSKMAINT` and other BIOS-level tools can
 read and write sectors. **Eject** converts the image back into the in-memory
 file list (use **Export .dsk** to keep it).
@@ -363,18 +379,21 @@ upload it to a drive and run it.
 
 | File | Role |
 | --- | --- |
-| `src/z80.ts` | Z80 interpreter: flags, prefixes, approximate cycles |
+| `src/z80.ts` | Z80 interpreter: flags, prefixes, T-states |
 | `src/cpm/disk.ts` | In-memory drive, 8.3 names, wildcards, user areas |
 | `src/cpm/image.ts` | Raw `.dsk` images, CP/M 2.2 directory and block allocation |
 | `src/cpm/bdos.ts` | BDOS calls (`CALL 5`) and CP/M directory |
 | `src/cpm/ccp.ts` | Shell, FCB parsing, `SUBMIT` |
-| `src/cpm/machine.ts` | Memory map, BDOS/BIOS traps, execution loop |
+| `src/cpm/layout.ts` | Memory map addresses |
+| `src/cpm/machine.ts` | BDOS/BIOS traps, execution loop, clock limit |
 | `src/terminal.ts` | xterm.js + CP437 + keyboard |
 
-The memory map is the classic one: `0000h` jumps to the BIOS, `0005h` to the
-BDOS at `FE00h`, and the BIOS jump table lives at `F000h`. Calls are
-intercepted on the host, which lets the BDOS wait for keyboard input without
-blocking the UI.
+The memory map is the classic one: `0000h` jumps to the BIOS warm boot and
+`0005h` to the BDOS entry at `FC06h`. Everything the system owns (CCP stack,
+allocation vector, BIOS jump table at `FE00h`, DPH/DPB, directory buffer) sits
+above it, so programs can use the whole TPA from `0100h` to `FBFFh`. Calls
+are intercepted on the host, which lets the BDOS wait for keyboard input
+without blocking the UI.
 
 ## Tests
 

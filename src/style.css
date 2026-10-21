@@ -1006,3 +1006,14 @@ body { overflow: hidden; }
 
   .footer { display: none; }
 }
+
+/* Phones: the LED alone shows READY/RUNNING, leaving room for the clock menu. */
+@media (max-width: 480px) {
+  #status-text { display: none; }
+  .terminal-select { padding-right: 17px; }
+}
+
+/* Small phones: the A> prompt already names the drive. */
+@media (max-width: 360px) {
+  .panel-title { display: none; }
+}
