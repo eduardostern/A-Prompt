@@ -23,6 +23,12 @@ export class Bdos {
   private searchEntries: SearchEntry[] = [];
   private searchIndex = 0;
   private xsubLine: number[] = [];
+  private rtcStamp: number[] | null = null;
+
+  /** Bytes written through BDOS 5 / BIOS LIST. */
+  readonly printerLog: number[] = [];
+  /** Bytes written through BDOS 4 / BIOS PUNCH. */
+  readonly serialLog: number[] = [];
 
   constructor(
     private cpu: Z80,
@@ -40,6 +46,23 @@ export class Bdos {
     this.searchIndex = 0;
     this.xsub = false;
     this.xsubLine = [];
+    this.rtcStamp = null;
+    this.printerLog.length = 0;
+    this.serialLog.length = 0;
+  }
+
+  /** CP/M 3 style 4-byte time stamp: day word, hour, minute. */
+  clockStamp(): number[] {
+    if (this.rtcStamp) return [...this.rtcStamp];
+    const epoch = Date.UTC(1978, 0, 1);
+    const now = new Date();
+    const localDay = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+    const days = Math.floor((localDay - epoch) / 86_400_000);
+    return [days & 0xff, (days >> 8) & 0xff, now.getHours(), now.getMinutes()];
+  }
+
+  setClockStamp(stamp: number[]): void {
+    if (stamp.length >= 4) this.rtcStamp = stamp.slice(0, 4);
   }
 
   /** Forgets open FCBs that belong to one drive (used by the UI reset). */
@@ -266,9 +289,13 @@ export class Bdos {
         break;
 
       case 4: // A_WRITE
+        this.serialLog.push(this.cpu.e & 0xff);
+        if (this.serialLog.length > 1_000_000) this.serialLog.splice(0, 500_000);
         break;
 
       case 5: // L_WRITE
+        this.printerLog.push(this.cpu.e & 0xff);
+        if (this.printerLog.length > 1_000_000) this.printerLog.splice(0, 500_000);
         break;
 
       case 6: { // C_RAWIO
@@ -607,6 +634,22 @@ export class Bdos {
         const rec = this.randomRecord(de);
         if (!this.writeRecord(entry.file, rec, entry.disk)) { this.result(2); break; }
         this.setSeqRecord(de, rec + 1);
+        this.result(0);
+        break;
+      }
+
+      case 104: { // T_SET (CP/M 3 style extension)
+        this.setClockStamp([
+          this.mem[de], this.mem[(de + 1) & 0xffff],
+          this.mem[(de + 2) & 0xffff], this.mem[(de + 3) & 0xffff],
+        ]);
+        this.result(0);
+        break;
+      }
+
+      case 105: { // T_GET (CP/M 3 style extension)
+        const stamp = this.clockStamp();
+        for (let i = 0; i < 4; i++) this.mem[(de + i) & 0xffff] = stamp[i];
         this.result(0);
         break;
       }

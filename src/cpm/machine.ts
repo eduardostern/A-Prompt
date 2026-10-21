@@ -241,7 +241,12 @@ export class CpmMachine {
         this.console.writeByte(cpu.c);
         break;
       case 5: // LIST
+        this.bdos.printerLog.push(cpu.c & 0xff);
+        if (this.bdos.printerLog.length > 1_000_000) this.bdos.printerLog.splice(0, 500_000);
+        break;
       case 6: // PUNCH
+        this.bdos.serialLog.push(cpu.c & 0xff);
+        if (this.bdos.serialLog.length > 1_000_000) this.bdos.serialLog.splice(0, 500_000);
         break;
       case 7: // READER
         cpu.a = 0x1a;

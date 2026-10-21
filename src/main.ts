@@ -143,6 +143,13 @@ const dropzone = el('dropzone');
 const fileInput = el<HTMLInputElement>('file-input');
 const uploadBtn = el<HTMLButtonElement>('upload-btn');
 const resetBtn = el<HTMLButtonElement>('reset-btn');
+const clockEl = el('clock');
+const printerCount = el('printer-count');
+const serialCount = el('serial-count');
+const printerDownload = el<HTMLButtonElement>('printer-download');
+const printerClear = el<HTMLButtonElement>('printer-clear');
+const serialDownload = el<HTMLButtonElement>('serial-download');
+const serialClear = el<HTMLButtonElement>('serial-clear');
 const consolePanel = document.querySelector<HTMLElement>('.console-panel')!;
 
 const activeDisk = (): Disk => drives[activeDrive];
@@ -282,6 +289,40 @@ function downloadFile(file: CpmFile): void {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+function downloadLog(name: string, bytes: number[]): void {
+  const blob = new Blob([new Uint8Array(bytes)], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function renderDevices(): void {
+  printerCount.textContent = formatSize(machine.bdos.printerLog.length);
+  serialCount.textContent = formatSize(machine.bdos.serialLog.length);
+}
+
+function updateClock(): void {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, '0');
+  clockEl.textContent = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
+printerDownload.addEventListener('click', () => downloadLog('printer.txt', machine.bdos.printerLog));
+serialDownload.addEventListener('click', () => downloadLog('serial.txt', machine.bdos.serialLog));
+printerClear.addEventListener('click', () => {
+  machine.bdos.printerLog.length = 0;
+  renderDevices();
+});
+serialClear.addEventListener('click', () => {
+  machine.bdos.serialLog.length = 0;
+  renderDevices();
+});
+
 function uniqueName(disk: Disk, user: number, name: string, ext: string): { name: string; ext: string } {
   const exists = disk.find(user, name, ext);
   if (!exists) return { name, ext };
@@ -412,6 +453,7 @@ machine.onRefresh = () => {
     activeDrive = lastMachineDrive;
   }
   renderFiles();
+  renderDevices();
 };
 machine.onBusy = (busy) => {
   consolePanel.classList.toggle('busy', busy);
@@ -442,6 +484,12 @@ loadBuiltins();
 for (let i = 0; i < drives.length; i++) restoreDrive(i);
 applyTerminalType(localStorage.getItem(TERM_KEY) ?? 'ansi', false);
 renderFiles();
+renderDevices();
+updateClock();
+window.setInterval(() => {
+  updateClock();
+  renderDevices();
+}, 1000);
 applyFontSize();
 statusText.textContent = 'READY';
 con.focus();

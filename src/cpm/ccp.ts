@@ -3,7 +3,7 @@ import type { Disk } from './disk';
 import { displayName, parseName, padName, padExt } from './disk';
 import { readConsoleLine } from '../console';
 
-const BUILTINS = ['DIR', 'ERA', 'TYPE', 'REN', 'USER', 'SAVE', 'CLS', 'HELP', 'EXIT', 'XSUB'];
+const BUILTINS = ['DIR', 'ERA', 'TYPE', 'REN', 'USER', 'SAVE', 'CLS', 'HELP', 'EXIT', 'XSUB', 'DATE'];
 
 /**
  * Console Command Processor.  The real CCP is a CP/M program living at the top
@@ -102,6 +102,7 @@ export class Ccp {
       case 'USER': return this.user(arg);
       case 'SAVE': return this.save(arg);
       case 'XSUB': return this.xsub(arg);
+      case 'DATE': return this.date();
       case 'CLS': this.console.write('\x1b[2J\x1b[H'); return;
       case 'HELP': return this.help();
       case 'EXIT':
@@ -225,6 +226,14 @@ export class Ccp {
     }
   }
 
+  private date(): void {
+    const [lo, hi, hours, minutes] = this.bdos.clockStamp();
+    const days = lo | (hi << 8);
+    const d = new Date(Date.UTC(1978, 0, 1) + days * 86_400_000 + hours * 3_600_000 + minutes * 60_000);
+    const iso = d.toISOString();
+    this.console.write(`${iso.slice(0, 10)} ${iso.slice(11, 16)}\r\n`);
+  }
+
   private save(arg: string): void {
     const m = arg.match(/^(\d{1,3})\s+(\S+)$/);
     if (!m) { this.console.write('SAVE?\r\n'); return; }
@@ -251,6 +260,7 @@ export class Ccp {
       '  REN new=old     rename a file',
       '  USER n          user area (0-15)',
       '  SAVE n file     save n 256-byte pages starting at 0100h',
+      '  DATE            show the virtual clock',
       '  CLS             clear the screen',
       '  HELP            this help',
       '',

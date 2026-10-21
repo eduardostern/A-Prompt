@@ -43,6 +43,9 @@ There is no backend and no WebAssembly: `dist/` is a plain static site.
   **`XSUB`** feeds the remaining lines to programs that read the console.
 - **Terminal profiles**: ANSI/VT100, ADM-3A and VT52 escape-sequence
   translation, with CP437 character mapping.
+- **Clock and devices**: virtual clock via CP/M 3-style `T_GET`/`T_SET`
+  (BDOS 104/105) and `DATE`; printer/serial bytes captured to downloadable
+  logs (BDOS 4/5 and BIOS LIST/PUNCH).
 - **Upload/download** from the drive panel; drives A:–D: (4 MB each, 16K
   blocks) are persisted in the browser's `localStorage`.
 
@@ -59,6 +62,7 @@ A>ASM HELLO.ASM
 A>LOAD HELLO
 A>SUBMIT DEMO
 A>SUBMIT XSUB
+A>DATE
 ```
 
 ## Running games
@@ -122,7 +126,8 @@ visitor's browser (`localStorage`), so every visitor has their own drive A:.
 
 - No raw sector I/O yet (BIOS READ/WRITE). Software that talks to physical
   disks (FORMAT, DSKMAINT) will not work.
-- CP/M 2.2 only (not CP/M 3); no clock, serial or printer.
+- CP/M 2.2 only (not CP/M 3). The clock is available through CP/M 3-style
+  `T_GET`/`T_SET` calls; serial is output-only (captured to a log).
 - Terminal profiles cover ANSI/VT100, ADM-3A and VT52; software that requires
   another terminal (Hazeltine, Televideo, Wyse, etc.) may render oddly.
 

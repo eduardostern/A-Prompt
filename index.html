@@ -45,6 +45,7 @@
 
           <div class="panel-foot">
             <span class="mono">Z80 · 64K · TPA 0100h–FBFFh</span>
+            <span id="clock" class="mono clock"></span>
             <span id="foot-hint">Ctrl+C interrupts · type HELP</span>
           </div>
         </section>
@@ -82,6 +83,22 @@
               <button class="chip" data-cmd="STAT" type="button">STAT</button>
               <button class="chip" data-cmd="TYPE HELLO.ASM" type="button">TYPE .ASM</button>
               <button class="chip" data-cmd="CLS" type="button">CLS</button>
+            </div>
+          </section>
+
+          <section class="card devices">
+            <h2>Devices</h2>
+            <div class="device-row">
+              <span class="device-name">Printer</span>
+              <span id="printer-count" class="device-count">0 B</span>
+              <button id="printer-download" class="chip" type="button">Download</button>
+              <button id="printer-clear" class="chip" type="button">Clear</button>
+            </div>
+            <div class="device-row">
+              <span class="device-name">Serial</span>
+              <span id="serial-count" class="device-count">0 B</span>
+              <button id="serial-download" class="chip" type="button">Download</button>
+              <button id="serial-clear" class="chip" type="button">Clear</button>
             </div>
           </section>
 

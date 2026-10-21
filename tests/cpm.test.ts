@@ -186,6 +186,31 @@ describe('CP/M 2.2 machine', () => {
     expect(machine.disk.find(0, '$$$     ', 'SUB')).toBeUndefined();
   });
 
+  it('captures printer/serial output and exposes the clock', async () => {
+    const { machine, con } = boot();
+    const code = new Uint8Array([
+      0x0e, 0x05, 0x1e, 0x50, 0xcd, 0x05, 0x00, // L_WRITE 'P'
+      0x0e, 0x04, 0x1e, 0x53, 0xcd, 0x05, 0x00, // A_WRITE 'S'
+      0x0e, 0x69, 0x11, 0x00, 0x02, 0xcd, 0x05, 0x00, // T_GET at 0200h
+      0xc9,
+    ]);
+    machine.drives[0].put('DEVTEST', 'COM', code);
+    await machine.runCom(machine.drives[0].find(0, 'DEVTEST ', 'COM')!, 'DEVTEST');
+    expect(machine.bdos.printerLog).toEqual([0x50]);
+    expect(machine.bdos.serialLog).toEqual([0x53]);
+    const days = machine.mem[0x0200] | (machine.mem[0x0201] << 8);
+    expect(days).toBeGreaterThan(0);
+    expect(machine.mem[0x0202]).toBeLessThan(24);
+    expect(machine.mem[0x0203]).toBeLessThan(60);
+
+    await machine.ccp.execute('DATE');
+    expect(con.output).toMatch(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}/);
+
+    machine.bdos.printerLog.length = 0;
+    machine.bdos.serialLog.length = 0;
+    expect(machine.bdos.printerLog).toHaveLength(0);
+  });
+
   it('dir/rename/user builtins keep the FCB layer consistent', async () => {
     const { machine } = boot();
     await machine.ccp.execute('REN NOVO.TXT=HELLO.ASM');
