@@ -11,6 +11,8 @@ import { CpmFile, MAX_BYTES, displayName, padExt, padName, trimName } from './cp
 const LS_PREFIX = 'a-prompt.drive.';
 const LEGACY_LS_KEY = 'a-prompt.drive.v1';
 const TERM_KEY = 'a-prompt.terminal';
+const CLOCK_KEY = 'a-prompt.clock';
+const DEFAULT_CLOCK_HZ = '4000000';
 const PANEL_KEY = 'a-prompt.panels';
 const MAX_UPLOAD = 512 * 1024;
 
@@ -164,6 +166,7 @@ const exportImageBtn = el<HTMLButtonElement>('export-image-btn');
 const ejectImageBtn = el<HTMLButtonElement>('eject-image-btn');
 const consoleDrive = el('console-drive');
 const terminalSelect = el<HTMLSelectElement>('terminal-type');
+const clockSelect = el<HTMLSelectElement>('clock-speed');
 const speedEl = el('speed');
 const resetMachine = el<HTMLButtonElement>('reset-machine');
 const usage = el('usage');
@@ -646,6 +649,25 @@ function applyTerminalType(type: string, persist = true): void {
 
 terminalSelect.addEventListener('change', () => applyTerminalType(terminalSelect.value));
 
+/** Sets the Z80 clock limit; the value is in Hz, "0" means no limit. */
+function applyClock(value: string, persist = true): void {
+  if (![...clockSelect.options].some((o) => o.value === value)) value = DEFAULT_CLOCK_HZ;
+  machine.clockHz = Number(value);
+  clockSelect.value = value;
+  if (persist) {
+    try {
+      localStorage.setItem(CLOCK_KEY, value);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+clockSelect.addEventListener('change', () => {
+  applyClock(clockSelect.value);
+  con.focus();
+});
+
 resetBtn.addEventListener('click', () => {
   if (machine.busy) return;
   const letter = letterFor(activeDrive);
@@ -721,6 +743,7 @@ consolePanel.addEventListener('click', (e) => {
 loadBuiltins();
 for (let i = 0; i < drives.length; i++) restoreDrive(i);
 applyTerminalType(localStorage.getItem(TERM_KEY) ?? 'ansi', false);
+applyClock(localStorage.getItem(CLOCK_KEY) ?? DEFAULT_CLOCK_HZ, false);
 const savedPanels = localStorage.getItem(PANEL_KEY);
 setPanels(isMobileLayout() ? false : savedPanels ? savedPanels === 'open' : true, false);
 renderFiles();

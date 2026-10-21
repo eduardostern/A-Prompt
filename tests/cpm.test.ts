@@ -306,6 +306,19 @@ describe('CP/M 2.2 compatibility', () => {
     expect(con.output).toContain('X');
   });
 
+  it('limits the Z80 clock when clockHz is set', async () => {
+    const { machine } = boot();
+    // 65536 iterations of DCX B / MOV A,B / ORA C / JNZ = 24 T-states each.
+    const loop = [0x01, 0x00, 0x00, 0x0b, 0x78, 0xb1, 0xc2, 0x03, 0x01, 0xc9];
+    machine.clockHz = 8_000_000;
+    const t0 = performance.now();
+    await run(machine, loop);
+    const elapsed = performance.now() - t0;
+    // 65536 * 24 T-states at 8 MHz is about 197 ms.
+    expect(elapsed).toBeGreaterThan(150);
+    expect(elapsed).toBeLessThan(1500);
+  });
+
   it('does not reuse a cached file when the FCB names another file', async () => {
     const { machine } = boot();
     machine.disk.put('A', 'DAT', new Uint8Array(128));

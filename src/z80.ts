@@ -4,8 +4,9 @@
  *
  * A complete, table-free interpreter covering the documented instruction set
  * plus the undocumented instructions used by real CP/M software (SLL, IXH/IXL,
- * DDCB/FDCB register copies, ED variants). Cycle counts are approximate and
- * only used by the host for pacing.
+ * DDCB/FDCB register copies, ED variants). T-states follow the Zilog timing
+ * tables (taken/not-taken branches, block repeats); the host uses them for
+ * the clock limit and the MHz display.
  */
 
 export const CF = 0x01; // carry
@@ -38,6 +39,61 @@ for (let i = 0; i < 256; i++) {
   SZ[i] = (i & (SF | XF | YF)) | (i === 0 ? ZF : 0);
   SZP[i] = SZ[i] | PARITY[i];
 }
+
+// T-states for unprefixed opcodes. Conditional JR/DJNZ/CALL/RET hold the
+// not-taken value; TAKEN adds the difference when the branch is taken.
+const BASE = new Uint8Array([
+  4, 10, 7, 6, 4, 4, 7, 4, 4, 11, 7, 6, 4, 4, 7, 4,
+  8, 10, 7, 6, 4, 4, 7, 4, 12, 11, 7, 6, 4, 4, 7, 4,
+  7, 10, 16, 6, 4, 4, 7, 4, 7, 11, 16, 6, 4, 4, 7, 4,
+  7, 10, 13, 6, 11, 11, 10, 4, 7, 11, 13, 6, 4, 4, 7, 4,
+  4, 4, 4, 4, 4, 4, 7, 4, 4, 4, 4, 4, 4, 4, 7, 4,
+  4, 4, 4, 4, 4, 4, 7, 4, 4, 4, 4, 4, 4, 4, 7, 4,
+  4, 4, 4, 4, 4, 4, 7, 4, 4, 4, 4, 4, 4, 4, 7, 4,
+  7, 7, 7, 7, 7, 7, 4, 7, 4, 4, 4, 4, 4, 4, 7, 4,
+  4, 4, 4, 4, 4, 4, 7, 4, 4, 4, 4, 4, 4, 4, 7, 4,
+  4, 4, 4, 4, 4, 4, 7, 4, 4, 4, 4, 4, 4, 4, 7, 4,
+  4, 4, 4, 4, 4, 4, 7, 4, 4, 4, 4, 4, 4, 4, 7, 4,
+  4, 4, 4, 4, 4, 4, 7, 4, 4, 4, 4, 4, 4, 4, 7, 4,
+  5, 10, 10, 10, 10, 11, 7, 11, 5, 10, 10, 0, 10, 17, 7, 11,
+  5, 10, 10, 11, 10, 11, 7, 11, 5, 4, 10, 11, 10, 0, 7, 11,
+  5, 10, 10, 19, 10, 11, 7, 11, 5, 4, 10, 4, 10, 0, 7, 11,
+  5, 10, 10, 4, 10, 11, 7, 11, 5, 6, 10, 4, 10, 0, 7, 11,
+]);
+
+/** Extra T-states for a taken conditional branch, and the branch's length. */
+const TAKEN = new Uint8Array(256);
+const TAKEN_LEN = new Uint8Array(256);
+for (const op of [0x10, 0x20, 0x28, 0x30, 0x38]) { TAKEN[op] = 5; TAKEN_LEN[op] = 2; }
+for (let op = 0xc0; op <= 0xf8; op += 8) {
+  TAKEN[op] = 6; TAKEN_LEN[op] = 1; // RET cc
+  TAKEN[op + 4] = 7; TAKEN_LEN[op + 4] = 3; // CALL cc
+}
+
+/** Opcodes that address (HL); with a DD/FD prefix they become (IX+d)/(IY+d). */
+const HL_MEM = new Uint8Array(256);
+for (const op of [0x34, 0x35, 0x36, 0x46, 0x4e, 0x56, 0x5e, 0x66, 0x6e, 0x7e,
+  0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x77, 0x86, 0x8e, 0x96, 0x9e, 0xa6, 0xae, 0xb6, 0xbe]) {
+  HL_MEM[op] = 1;
+}
+
+function edCycles(op: number): number {
+  if (op >= 0x40 && op < 0x80) {
+    switch (op & 7) {
+      case 0: case 1: return 12; // IN r,(C) / OUT (C),r
+      case 2: return 15; // SBC/ADC HL,rr
+      case 3: return 20; // LD (nn),rr / LD rr,(nn)
+      case 5: return 14; // RETN / RETI
+      case 7: return op === 0x67 || op === 0x6f ? 18 : op === 0x77 || op === 0x7f ? 8 : 9;
+      default: return 8; // NEG, IM
+    }
+  }
+  if ((op & 0xe4) === 0xa0) return 16; // block transfer/compare/IO
+  return 8;
+}
+
+/** True for LDIR/CPIR/INIR/OTIR and their decrementing forms. */
+const isBlockRepeat = (op: number): boolean => (op & 0xf4) === 0xb0;
 
 export class Z80 {
   mem = new Uint8Array(65536);
@@ -337,10 +393,44 @@ export class Z80 {
   step(): void {
     if (this.halted) { this.cycles += 4; return; }
     this.r = (this.r & 0x80) | ((this.r + 1) & 0x7f);
-    const op = this.mem[this.pc & 0xffff];
-    this.pc = (this.pc + 1) & 0xffff;
-    this.cycles += 4;
+    const start = this.pc & 0xffff;
+    const op = this.mem[start];
+    this.pc = (start + 1) & 0xffff;
     this.execBase(op);
+    this.cycles += this.timing(op, start);
+  }
+
+  /** T-states of the instruction that started at `start` and just ran. */
+  private timing(op: number, start: number): number {
+    const m = this.mem;
+    if (op === 0xcb) {
+      const o = m[(start + 1) & 0xffff];
+      if ((o & 7) !== 6) return 8;
+      return (o & 0xc0) === 0x40 ? 12 : 15; // BIT b,(HL) : other (HL) ops
+    }
+    if (op === 0xed) {
+      const o = m[(start + 1) & 0xffff];
+      return edCycles(o) + (isBlockRepeat(o) && this.pc === start ? 5 : 0);
+    }
+    if (op === 0xdd || op === 0xfd) {
+      // Each extra DD/FD prefix costs 4 T-states and acts as a NOP.
+      let p = (start + 1) & 0xffff;
+      let t = 0;
+      while (m[p] === 0xdd || m[p] === 0xfd) { t += 4; p = (p + 1) & 0xffff; }
+      const o = m[p];
+      if (o === 0xcb) return t + ((m[(p + 2) & 0xffff] & 0xc0) === 0x40 ? 20 : 23);
+      if (o === 0xed) {
+        const e = m[(p + 1) & 0xffff];
+        return t + 4 + edCycles(e) + (isBlockRepeat(e) && this.pc === p ? 5 : 0);
+      }
+      if (HL_MEM[o]) return t + (o === 0x36 ? 19 : BASE[o] + 12);
+      let base = t + 4 + BASE[o];
+      if (TAKEN[o] && this.pc !== ((p + TAKEN_LEN[o]) & 0xffff)) base += TAKEN[o];
+      return base;
+    }
+    let t = BASE[op];
+    if (TAKEN[op] && this.pc !== ((start + TAKEN_LEN[op]) & 0xffff)) t += TAKEN[op];
+    return t;
   }
 
   private execBase(op: number): void {
@@ -682,7 +772,6 @@ export class Z80 {
         this.f = (this.f & (SF | ZF | CF)) | (this.bc ? PF : 0) |
           (sum & XF) | ((sum & 0x02) ? YF : 0);
         if (this.bc !== 0) this.pc = (this.pc - 2) & 0xffff;
-        else this.cycles += 5;
         break;
       }
       case 0xa1: case 0xa9: { // CPI / CPD
@@ -708,7 +797,6 @@ export class Z80 {
         this.f = (this.f & CF) | NF | half | (r & SF) | (r === 0 ? ZF : 0) | (this.bc ? PF : 0) |
           (diff & XF) | ((diff & 0x02) ? YF : 0);
         if (this.bc !== 0 && r !== 0) this.pc = (this.pc - 2) & 0xffff;
-        else this.cycles += 5;
         break;
       }
       case 0xa2: case 0xaa: { // INI / IND

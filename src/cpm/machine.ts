@@ -38,6 +38,9 @@ export class CpmMachine {
   onBusy?: (busy: boolean) => void;
   onSpeed?: (mhz: number) => void;
   yieldFn: () => Promise<void> = () => new Promise((r) => requestAnimationFrame(() => r()));
+  sleepFn: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms));
+  /** Target Z80 clock in Hz; 0 runs as fast as the host allows. */
+  clockHz = 0;
 
   private warm = false;
   private stopped = false;
@@ -224,43 +227,56 @@ export class CpmMachine {
     let slice = started;
     let steps = 0;
     let sampleTime = started;
-    let sampleSteps = 0;
+    let sampleCycles = cpu.cycles;
+    // Clock limit: the cycles run since paceCycles should take this long.
+    let paceTime = started;
+    let paceCycles = cpu.cycles;
+    let paceHz = this.clockHz;
+    const repace = () => { paceTime = performance.now(); paceCycles = cpu.cycles; };
 
     try {
       while (!this.warm && !this.stopped) {
         const pc = cpu.pc;
-        if (pc === BDOS_ENTRY) {
-          await this.bdos.handle();
-          continue;
-        }
-        if (pc >= TRAP_BASE && pc < TRAP_BASE + BIOS_ENTRIES * 3) {
-          if (await this.biosTrap(pc)) break;
+        if (pc === BDOS_ENTRY || (pc >= TRAP_BASE && pc < TRAP_BASE + BIOS_ENTRIES * 3)) {
+          const before = performance.now();
+          if (pc === BDOS_ENTRY) await this.bdos.handle();
+          else if (await this.biosTrap(pc)) break;
+          // Time spent waiting for a key is not owed back as a burst of speed.
+          if (performance.now() - before > 1) repace();
           continue;
         }
         cpu.step();
         steps++;
         if (cpu.halted) {
-          // A HALT with no interrupt source would otherwise spin here until
-          // the execution limit. Treat it as the end of the program.
+          // A HALT with no interrupt source would otherwise spin here
+          // forever. Treat it as the end of the program.
           break;
         }
-        if ((steps & 0x1fff) === 0) {
-          const now = performance.now();
+        if ((steps & 0x7ff) === 0) {
+          let now = performance.now();
           if (now - sampleTime >= 250) {
-            const mhz = ((steps - sampleSteps) * 4) / ((now - sampleTime) / 1000) / 1_000_000;
+            const mhz = (cpu.cycles - sampleCycles) / ((now - sampleTime) / 1000) / 1_000_000;
             this.onSpeed?.(mhz);
             sampleTime = now;
-            sampleSteps = steps;
+            sampleCycles = cpu.cycles;
+          }
+          if (this.clockHz !== paceHz) { paceHz = this.clockHz; repace(); }
+          if (this.clockHz > 0) {
+            const ahead = paceTime + ((cpu.cycles - paceCycles) * 1000) / this.clockHz - now;
+            if (ahead > 2) {
+              await this.sleepFn(Math.min(ahead, 100));
+              now = slice = performance.now();
+            } else if (ahead < -50) {
+              repace(); // the host fell behind (busy or background tab)
+            }
           }
           if (now - slice > 10) {
             await this.yieldFn();
             slice = performance.now();
           }
         }
-        if (steps > 1_000_000_000) {
-          this.console.write('\r\n* program interrupted (execution limit)\r\n');
-          break;
-        }
+        // No instruction cap: games poll the keyboard forever. A runaway
+        // program is stopped with the Reset button (drives are preserved).
       }
     } catch (e) {
       if (!(e instanceof WarmBoot)) {

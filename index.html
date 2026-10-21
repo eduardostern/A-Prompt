@@ -39,6 +39,12 @@
                 <option value="adm3a">ADM-3A</option>
                 <option value="vt52">VT52</option>
               </select>
+              <select id="clock-speed" class="terminal-select" aria-label="Z80 clock speed" title="Z80 clock speed (Max runs as fast as your computer allows)">
+                <option value="2000000">2 MHz</option>
+                <option value="4000000">4 MHz</option>
+                <option value="8000000">8 MHz</option>
+                <option value="0">Max</option>
+              </select>
               <button id="reset-machine" class="panel-toggle" type="button" title="Reboot the emulator (drives preserved)" aria-label="Reboot the emulator">↻ <span class="panel-toggle-label">Reset</span></button>
               <span class="panel-status"><i id="led" class="led"></i><span id="status-text">BOOTING</span></span>
             </div>
@@ -51,7 +57,7 @@
           <div class="panel-foot">
             <span class="mono" title="Approximate effective Z80 clock, derived from T-states per second">Z80 · 64K · <span id="speed" class="speed">IDLE</span></span>
             <span id="clock" class="mono clock"></span>
-            <span id="foot-hint">Ctrl+C interrupts · type HELP</span>
+            <span id="foot-hint">Ctrl+C cancels a line · Reset stops a program · type HELP</span>
           </div>
         </section>
 
