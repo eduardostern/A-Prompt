@@ -23,6 +23,7 @@
           <a href="http://www.retroarchive.org/cpm/games/games.htm" target="_blank" rel="noreferrer">Games ↗</a>
           <a href="https://github.com/eduardostern/A-Prompt" target="_blank" rel="noreferrer">GitHub ↗</a>
           <a href="#about">About</a>
+          <a href="#" class="info-open">What is CP/M?</a>
         </nav>
       </header>
 
@@ -152,6 +153,9 @@
               Source, issues and releases:
               <a href="https://github.com/eduardostern/A-Prompt" target="_blank" rel="noreferrer">github.com/eduardostern/A-Prompt</a>
             </p>
+            <p class="muted">
+              <a href="#" class="info-open">What is CP/M? History, Z80 and VisiCalc →</a>
+            </p>
           </section>
         </aside>
       </main>
@@ -164,6 +168,107 @@
         <span class="mono">CP/M 2.2 · 1979 · Digital Research</span>
       </footer>
     </div>
+
+    <dialog id="cpm-info" class="info-dialog">
+      <article>
+        <header class="info-head">
+          <div>
+            <span class="info-kicker">A short field guide</span>
+            <h2>What is CP/M?</h2>
+          </div>
+          <button type="button" class="info-close" aria-label="Close">Close ×</button>
+        </header>
+
+        <p class="info-lede">
+          CP/M — Control Program for Microcomputers — was the first widely
+          standard operating system for microcomputers. It made software
+          portable across dozens of incompatible 8080/Z80 machines.
+        </p>
+
+        <div class="info-grid">
+          <section>
+            <h3>1974 → 1979</h3>
+            <p>
+              Gary Kildall wrote CP/M at Digital Research. CP/M 1.4 arrived in
+              1976 and CP/M 2.2 — the version this emulator implements — in
+              1979. It became the default OS for business micros: Altair,
+              Osborne, Kaypro, Xerox, North Star, Epson and many other 8080/Z80
+              machines.
+            </p>
+          </section>
+          <section>
+            <h3>Why the Z80?</h3>
+            <p>
+              CP/M was written for the Intel 8080. The Z80 is binary-compatible
+              with the 8080, cheaper, and adds instructions and registers.
+              Most CP/M software is plain 8080 code and runs happily on a Z80;
+              the extra instructions only made some programs faster or more
+              compact.
+            </p>
+          </section>
+          <section>
+            <h3>The standardization trick</h3>
+            <p>
+              CP/M split the machine into three layers: the <b>BIOS</b>
+              (hardware-specific), the <b>BDOS</b> (files, console, disk
+              directory) and the <b>CCP</b> (the <code>A&gt;</code> prompt and
+              commands). Programs call BDOS through <code>CALL 5</code> and
+              never touch the hardware directly. That is why one binary could
+              run on machines with completely different floppy controllers.
+            </p>
+          </section>
+          <section>
+            <h3>The shared conventions</h3>
+            <p>
+              8.3 filenames, 128-byte records, FCBs, user areas, the transient
+              program area (TPA), <code>.COM</code> executables and utilities
+              like PIP, STAT, ED, ASM. These conventions were the “API” that
+              made an ecosystem possible.
+            </p>
+          </section>
+          <section>
+            <h3>What ran on it</h3>
+            <p>
+              WordStar, dBASE II, SuperCalc, MultiPlan, Turbo Pascal, MBASIC,
+              FORTRAN, COBOL, assemblers — and games: Sargon, Zork, Adventure,
+              Nemesis. The 8-bit business machine era was largely a CP/M era.
+            </p>
+          </section>
+          <section>
+            <h3>Where is VisiCalc?</h3>
+            <p>
+              VisiCalc (1979, Dan Bricklin and Bob Frankston) was the first
+              spreadsheet and the “killer app” of personal computing. It did
+              have CP/M ports, but they were niche: the HP 125 and Sony SMC-70
+              versions are the CP/M releases. The mass-market VisiCalc was for
+              the Apple II, Atari, TRS-80 and IBM PC. The spreadsheet that
+              actually shipped with CP/M business machines was usually
+              <b>SuperCalc</b>.
+            </p>
+            <p>
+              A-Prompt does not bundle VisiCalc or SuperCalc (both are still
+              copyrighted). If you have a CP/M <code>.COM</code>, upload it to
+              a drive and run it; otherwise try the SuperCalc archives at
+              RetroArchive.
+            </p>
+          </section>
+          <section>
+            <h3>This machine</h3>
+            <p>
+              64 KB RAM, Z80, TPA <code>0100h–FBFFh</code>, drives A:–D:,
+              CP/M 2.2 BDOS and CCP, FCBs, 8.3 files, ADM-3A/VT52/ANSI terminal
+              profiles and mountable <code>.dsk</code> images.
+            </p>
+          </section>
+        </div>
+
+        <footer class="info-foot">
+          <a href="https://en.wikipedia.org/wiki/CP/M" target="_blank" rel="noreferrer">CP/M on Wikipedia ↗</a>
+          <a href="https://en.wikipedia.org/wiki/VisiCalc" target="_blank" rel="noreferrer">VisiCalc ↗</a>
+          <a href="http://www.retroarchive.org/cpm/business/business.htm" target="_blank" rel="noreferrer">CP/M business software ↗</a>
+        </footer>
+      </article>
+    </dialog>
 
     <script type="module" src="/src/main.ts"></script>
   </body>

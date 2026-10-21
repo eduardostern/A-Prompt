@@ -235,6 +235,48 @@ file list (use **Export .dsk** to keep it).
 - Terminal profiles cover ANSI/VT100, ADM-3A and VT52; software that requires
   another terminal (Hazeltine, Televideo, Wyse, etc.) may render oddly.
 
+## What is CP/M?
+
+CP/M — **Control Program for Microcomputers** — was the first widely
+standard operating system for microcomputers. Gary Kildall wrote it at Digital
+Research in 1974; CP/M 2.2, the version this emulator implements, arrived in
+1979. It became the default OS for 8080/Z80 business machines: Altair,
+Osborne, Kaypro, Xerox, North Star, Epson and many others.
+
+**Why the Z80?** CP/M was written for the Intel 8080. The Z80 is
+binary-compatible with the 8080, cheaper, and adds instructions and registers.
+Most CP/M software is plain 8080 code and runs on a Z80 unchanged.
+
+**The standardization trick** was splitting the machine into three layers:
+
+- **BIOS** — the hardware-specific part (console, disk controller)
+- **BDOS** — files, directory, console and the API reached through `CALL 5`
+- **CCP** — the `A>` prompt and built-in commands
+
+Programs never touched the hardware directly. Add shared conventions — 8.3
+filenames, 128-byte records, FCBs, user areas, the TPA, `.COM` files — and the
+same binary could run on completely different machines.
+
+**What ran on it:** WordStar, dBASE II, SuperCalc, MultiPlan, Turbo Pascal,
+MBASIC, FORTRAN, COBOL, assemblers, and games such as Sargon, Zork, Adventure
+and Nemesis.
+
+### Where is VisiCalc?
+
+VisiCalc (1979, Dan Bricklin and Bob Frankston) was the first spreadsheet and
+the “killer app” of personal computing. It did have CP/M ports, but they were
+niche: the **HP 125** and **Sony SMC-70** versions are the CP/M releases. The
+mass-market VisiCalc ran on the Apple II, Atari, TRS-80 and IBM PC. The
+spreadsheet usually bundled with CP/M business machines was **SuperCalc**.
+
+A-Prompt does not bundle VisiCalc or SuperCalc — both are still copyrighted.
+If you have a CP/M `.COM`, upload it to a drive and run it. SuperCalc archives
+are available at
+[RetroArchive](http://www.retroarchive.org/cpm/business/business.htm).
+
+- [CP/M on Wikipedia](https://en.wikipedia.org/wiki/CP/M)
+- [VisiCalc on Wikipedia](https://en.wikipedia.org/wiki/VisiCalc)
+
 ## Architecture
 
 | File | Role |

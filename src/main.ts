@@ -180,6 +180,19 @@ const printerClear = el<HTMLButtonElement>('printer-clear');
 const serialDownload = el<HTMLButtonElement>('serial-download');
 const serialClear = el<HTMLButtonElement>('serial-clear');
 const consolePanel = document.querySelector<HTMLElement>('.console-panel')!;
+const infoDialog = el<HTMLDialogElement>('cpm-info');
+
+document.querySelectorAll<HTMLAnchorElement>('.info-open').forEach((link) => {
+  link.addEventListener('click', (ev) => {
+    ev.preventDefault();
+    infoDialog.showModal();
+  });
+});
+infoDialog.querySelector<HTMLButtonElement>('.info-close')?.addEventListener('click', () => infoDialog.close());
+infoDialog.addEventListener('click', (ev) => {
+  if (ev.target === infoDialog) infoDialog.close();
+});
+
 
 const activeDisk = (): Disk => drives[activeDrive];
 
