@@ -48,29 +48,12 @@ export class Ccp {
    * reverse order.  The CCP consumes the last record and truncates the file.
    */
   private nextSubmitCommand(): string | null {
-    const file = this.disk.find(0, '$$$     ', 'SUB');
-    if (!file) return null;
-    if (file.data.length < 128) {
-      this.disk.remove(file);
-      this.machine.forgetFile(file);
-      return null;
-    }
-    const records = Math.ceil(file.data.length / 128);
-    const start = (records - 1) * 128;
-    const rec = file.data.subarray(start, start + 128);
-    const len = Math.min(127, rec[0] ?? 0);
+    const line = this.bdos.popSubmitLine();
+    if (!line) return null;
     let text = '';
-    for (let i = 0; i < len; i++) {
-      const ch = rec[1 + i];
-      if (ch === 0 || ch === 0x0d || ch === 0x0a) break;
+    for (const ch of line) {
+      if (ch === 0x0d || ch === 0x0a) break;
       text += String.fromCharCode(ch);
-    }
-    const remaining = start;
-    if (remaining === 0) {
-      this.disk.remove(file);
-      this.machine.forgetFile(file);
-    } else {
-      file.data = file.data.slice(0, remaining);
     }
     return text;
   }

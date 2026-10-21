@@ -104,24 +104,40 @@ export class Bdos {
 
   // ---- console input, optionally from a SUBMIT file (XSUB) --------------
 
-  private hasXsubInput(): boolean {
-    if (this.xsubLine.length) return true;
-    if (!this.xsub) return false;
-    const file = this.currentDisk().find(0, '$$$     ', 'SUB');
-    return !!file && file.data.length >= 128;
+  /**
+   * The pending SUBMIT queue. SUBMIT.COM writes $$$.SUB to the current drive
+   * and user area; the real CCP only looks on A:. Search A:, then the current
+   * drive, then the rest, so a batch keeps running after it changes drive or
+   * user area.
+   */
+  submitFile(): { disk: Disk; file: CpmFile } | undefined {
+    const order = [0, this.drive, ...this.drives.keys()];
+    const users = this.user === 0 ? [0] : [this.user, 0];
+    for (const index of order) {
+      const disk = this.drives[index];
+      if (!disk) continue;
+      for (const user of users) {
+        const file = disk.find(user, '$$$     ', 'SUB');
+        if (file) return { disk, file };
+      }
+    }
+    return undefined;
   }
 
-  private hasConsoleInput(): boolean {
-    return this.con.hasInput() || this.hasXsubInput();
-  }
-
-  /** Loads the next queued line from $$$.SUB into the XSUB buffer. */
-  private loadXsubLine(): void {
-    const disk = this.currentDisk();
-    const file = disk.find(0, '$$$     ', 'SUB');
-    if (!file || file.data.length < 128) return;
-    const records = Math.ceil(file.data.length / 128);
-    const start = (records - 1) * 128;
+  /**
+   * Removes the next queued command (the last 128-byte record) from $$$.SUB
+   * and returns its text bytes, or null when no batch is pending.
+   */
+  popSubmitLine(): number[] | null {
+    const found = this.submitFile();
+    if (!found) return null;
+    const { disk, file } = found;
+    if (file.data.length < 128) {
+      disk.remove(file);
+      this.forget(file);
+      return null;
+    }
+    const start = (Math.ceil(file.data.length / 128) - 1) * 128;
     const rec = file.data.subarray(start, start + 128);
     const len = Math.min(127, rec[0] ?? 0);
     const line: number[] = [];
@@ -130,11 +146,30 @@ export class Bdos {
       if (ch === 0) break;
       line.push(ch);
     }
-    line.push(13);
-    this.xsubLine = line;
     if (start === 0) disk.remove(file);
-    else file.data = file.data.slice(0, start);
+    else {
+      file.data = file.data.slice(0, start);
+      disk.markFilesDirty();
+    }
     this.forget(file);
+    return line;
+  }
+
+  private hasXsubInput(): boolean {
+    if (this.xsubLine.length) return true;
+    if (!this.xsub) return false;
+    const found = this.submitFile();
+    return !!found && found.file.data.length >= 128;
+  }
+
+  private hasConsoleInput(): boolean {
+    return this.con.hasInput() || this.hasXsubInput();
+  }
+
+  /** Loads the next queued line from $$$.SUB into the XSUB buffer. */
+  private loadXsubLine(): void {
+    const line = this.popSubmitLine();
+    if (line) this.xsubLine = [...line, 13];
   }
 
   private async readChar(): Promise<number> {

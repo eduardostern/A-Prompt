@@ -25,8 +25,14 @@ class TestConsole implements ConsoleIO {
     else if (code >= 128) this.output += '.';
   }
 
+  private idleReads = 0;
+
   async readByte(): Promise<number> {
-    return this.queue.shift() ?? 0x1a;
+    const ch = this.queue.shift();
+    if (ch !== undefined) { this.idleReads = 0; return ch; }
+    // Fail instead of hanging when a test waits for input it never feeds.
+    if (++this.idleReads > 10_000) throw new Error('test console: waiting for input');
+    return 0x1a;
   }
 
   pollByte(): number | undefined {
@@ -304,6 +310,31 @@ describe('CP/M 2.2 compatibility', () => {
     ];
     await run(machine, code);
     expect(con.output).toContain('X');
+  });
+
+  it('keeps running a SUBMIT batch after it changes drive', async () => {
+    const { machine, con } = boot();
+    machine.drives[1].put('SW', 'SUB', new TextEncoder().encode('A:\r\nHELLO\r\n\x1a'));
+    await machine.ccp.execute('B:');
+    await machine.ccp.execute('A:SUBMIT SW');
+    expect(machine.drives[1].find(0, '$$$     ', 'SUB')).toBeTruthy();
+    for (let i = 0; i < 2; i++) await machine.ccp.execute(await machine.ccp.prompt());
+    expect(con.output).toContain('Hello from CP/M 2.2!');
+    expect(machine.bdos.drive).toBe(0);
+    expect(machine.drives[1].find(0, '$$$     ', 'SUB')).toBeUndefined();
+  });
+
+  it('runs a SUBMIT batch from another user area', async () => {
+    const { machine, con } = boot();
+    const submit = machine.disk.find(0, 'SUBMIT  ', 'COM')!;
+    machine.disk.put('SUBMIT', 'COM', submit.data, 3);
+    machine.disk.put('U', 'SUB', new TextEncoder().encode('DIR\r\n\x1a'), 3);
+    await machine.ccp.execute('USER 3');
+    await machine.ccp.execute('SUBMIT U');
+    await machine.ccp.execute(await machine.ccp.prompt());
+    expect(con.output).toContain('A>DIR');
+    expect(con.output).toContain('SUBMIT   COM');
+    expect(machine.disk.find(3, '$$$     ', 'SUB')).toBeUndefined();
   });
 
   it('limits the Z80 clock when clockHz is set', async () => {
