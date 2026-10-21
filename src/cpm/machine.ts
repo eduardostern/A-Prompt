@@ -202,7 +202,8 @@ export class CpmMachine {
     this.writeFcb(0x006c, tokens[1]);
 
     m.set(file.data, 0x0100);
-    m[0x0004] = this.bdos.drive & 0x0f;
+    // 0004h: current user (high nibble) and drive, restored on warm boot.
+    m[0x0004] = ((this.bdos.user & 0x0f) << 4) | (this.bdos.drive & 0x0f);
     // Like the real CCP: every program starts with DMA at 0080h and no open files.
     this.bdos.startProgram();
 
@@ -283,6 +284,11 @@ export class CpmMachine {
         this.console.write(`\r\n* ${(e as Error).message}\r\n`);
       }
     } finally {
+      // Like the real CCP after a warm boot: programs that reset the disk
+      // system (BDOS 13 selects A:) or change user do not move the prompt.
+      const cdisk = m[0x0004];
+      if ((cdisk & 0x0f) < this.drives.length) this.bdos.drive = cdisk & 0x0f;
+      this.bdos.user = cdisk >> 4;
       this.syncImages();
       this.busy = false;
       this.onBusy?.(false);

@@ -1,9 +1,10 @@
 import type { Z80 } from '../z80';
-import { Disk, CpmFile, padName, padExt, MAX_BYTES } from './disk';
+import { Disk, CpmFile, DriveFormat, allocation, padName, padExt } from './disk';
 import { ConsoleIO, WarmBoot } from '../console';
 import { ALV_ADDR, ALV_BYTES, DPB_ADDR } from './layout';
 
-type SearchEntry = { file: CpmFile; extent: number };
+/** One directory entry of a search: entry `entry` of `file`, whose first block is `firstBlock`. */
+type SearchEntry = { file: CpmFile; entry: number; firstBlock: number; fmt: DriveFormat };
 type OpenFile = { file: CpmFile; disk: Disk };
 
 /**
@@ -21,6 +22,8 @@ export class Bdos {
   xsub = false;
 
   private open = new Map<number, OpenFile>();
+  /** Buffers with spare room that grow() made, and the file each belongs to. */
+  private growth = new WeakMap<ArrayBufferLike, CpmFile>();
   private searchEntries: SearchEntry[] = [];
   private searchIndex = 0;
   private xsubLine: number[] = [];
@@ -268,14 +271,33 @@ export class Bdos {
     return true;
   }
 
+  /**
+   * Returns `data` extended to `length` bytes. Spare room is kept after the
+   * end so appending one record at a time does not copy the whole file each
+   * time.
+   */
+  private grow(f: CpmFile, length: number): Uint8Array {
+    const data = f.data;
+    // Only reuse spare room in a buffer this BDOS allocated for this file.
+    if (this.growth.get(data.buffer) === f && data.byteOffset === 0 && data.buffer.byteLength >= length) {
+      const view = new Uint8Array(data.buffer, 0, length);
+      view.fill(0, data.length);
+      return view;
+    }
+    const buf = new Uint8Array(Math.max(length, data.length * 2, 16384));
+    buf.set(data);
+    this.growth.set(buf.buffer, f);
+    return buf.subarray(0, length);
+  }
+
   private writeRecord(f: CpmFile, record: number, disk: Disk): boolean {
     const off = record * 128;
     const end = off + 128;
     if (f.data.length < end) {
-      const grown = new Uint8Array(end);
-      grown.set(f.data);
-      if (disk.usedBytes() - f.data.length + grown.length > MAX_BYTES) return false;
-      f.data = grown;
+      const fmt = disk.format;
+      const newBlock = allocation(fmt, end).blocks > allocation(fmt, f.data.length).blocks;
+      if (newBlock && !disk.canStore(f, end)) return false; // disk or directory full
+      f.data = this.grow(f, end);
     }
     f.data.set(this.mem.subarray(this.dma, this.dma + 128), off);
     disk.markFilesDirty();
@@ -299,18 +321,55 @@ export class Bdos {
       (this.mem[(fcb + 35) & 0xffff] << 16);
   }
 
-  private dirEntry(fcb: number, f: CpmFile, extent: number): void {
+  /**
+   * Block numbers the drive's files would occupy if laid out one after the
+   * other after the directory. Used for search results and the allocation
+   * vector, so STAT and directory tools see consistent sizes.
+   */
+  private blockLayout(disk: Disk): { first: Map<CpmFile, number>; used: number } {
+    const fmt = disk.format;
+    const first = new Map<CpmFile, number>();
+    let next = fmt.reservedBlocks;
+    for (const f of disk.files) {
+      first.set(f, next);
+      next += allocation(fmt, f.data.length).blocks;
+    }
+    return { first, used: next };
+  }
+
+  /** Writes a CP/M directory entry for a search result at the DMA address. */
+  private dirEntry(ent: SearchEntry): void {
+    const { file: f, fmt } = ent;
+    const m = this.mem;
     const base = this.dma;
-    this.mem.fill(0, base, base + 32);
-    this.mem[base] = f.user;
-    for (let i = 0; i < 8; i++) this.mem[base + 1 + i] = f.name.charCodeAt(i);
-    for (let i = 0; i < 3; i++) this.mem[base + 9 + i] = f.ext.charCodeAt(i);
-    if (f.ro) this.mem[base + 9] |= 0x80;
-    if (f.sys) this.mem[base + 10] |= 0x80;
-    this.mem[base + 12] = extent;
-    this.mem[base + 15] = Math.min(128, Disk.extentRecords(f, extent));
-    const blocks = Math.min(16, Math.ceil(Math.max(0, f.data.length - extent * 16384) / 16384));
-    for (let i = 0; i < blocks; i++) this.mem[base + 16 + i] = (1 + extent * 8 + i) & 0xff;
+    m.fill(0, base, base + 32);
+    m[base] = f.user;
+    for (let i = 0; i < 8; i++) m[base + 1 + i] = f.name.charCodeAt(i);
+    for (let i = 0; i < 3; i++) m[base + 9 + i] = f.ext.charCodeAt(i);
+    if (f.ro) m[base + 9] |= 0x80;
+    if (f.sys) m[base + 10] |= 0x80;
+    const per = fmt.extentsPerEntry;
+    const entryBytes = per * 16384;
+    const start = ent.entry * entryBytes;
+    const length = Math.min(entryBytes, Math.max(0, f.data.length - start));
+    const records = Math.ceil(length / 128);
+    // EX/S2 name the last logical extent in the entry; RC counts its records.
+    const last = records ? Math.floor((records - 1) / 128) : 0;
+    const extent = ent.entry * per + last;
+    m[base + 12] = extent & 0x1f;
+    m[base + 14] = (extent >> 5) & 0x3f;
+    m[base + 15] = records - last * 128;
+    const blocks = Math.ceil(length / fmt.blockSize);
+    const first = ent.firstBlock + (ent.entry * entryBytes) / fmt.blockSize;
+    for (let i = 0; i < blocks; i++) {
+      const b = Math.min(fmt.dsm, first + i);
+      if (fmt.wide) {
+        m[base + 16 + i * 2] = b & 0xff;
+        m[base + 17 + i * 2] = b >> 8;
+      } else {
+        m[base + 16 + i] = b;
+      }
+    }
   }
 
   // ---- entry point ------------------------------------------------------
@@ -480,26 +539,25 @@ export class Bdos {
         const disk = this.target(de);
         if (!disk) { this.result(0xff); break; }
         const files = disk.search(this.user, n.name, n.ext);
+        const fmt = disk.format;
+        const layout = this.blockLayout(disk);
         this.searchEntries = [];
         for (const f of files) {
-          const extents = Disk.extents(f);
-          for (let e = 0; e < extents; e++) this.searchEntries.push({ file: f, extent: e });
+          const { entries } = allocation(fmt, f.data.length);
+          const firstBlock = layout.first.get(f) ?? fmt.reservedBlocks;
+          for (let e = 0; e < entries; e++) this.searchEntries.push({ file: f, entry: e, firstBlock, fmt });
         }
         this.searchIndex = 0;
         if (!this.searchEntries.length) { this.result(0xff); break; }
-        {
-          const ent = this.searchEntries[0];
-          this.dirEntry(de, ent.file, ent.extent);
-          this.searchIndex = 1;
-          this.result(0);
-        }
+        this.dirEntry(this.searchEntries[0]);
+        this.searchIndex = 1;
+        this.result(0);
         break;
       }
 
       case 18: { // F_SNEXT
         if (this.searchIndex >= this.searchEntries.length) { this.result(0xff); break; }
-        const ent = this.searchEntries[this.searchIndex++];
-        this.dirEntry(de, ent.file, ent.extent);
+        this.dirEntry(this.searchEntries[this.searchIndex++]);
         this.result(0);
         break;
       }
@@ -545,6 +603,8 @@ export class Bdos {
         const n = this.fcbName(de);
         const disk = this.target(de);
         if (!disk) { this.result(0xff); break; }
+        // A new file needs a free directory entry.
+        if (!disk.find(this.user, n.name, n.ext) && !disk.canStore(null, 0)) { this.result(0xff); break; }
         const f = disk.create(this.user, n.name, n.ext);
         if ('error' in f) { this.result(0xff); break; }
         this.setOpenState(de, f, disk);
@@ -584,10 +644,15 @@ export class Bdos {
         this.result(0);
         break;
 
-      case 27: // DRV_ALLOCVEC
+      case 27: { // DRV_ALLOCVEC: one bit per block, set when in use
+        const disk = this.currentDisk();
+        const blocks = disk.format.dsm + 1;
+        const used = Math.min(blocks, this.blockLayout(disk).used);
+        this.mem.fill(0, ALV_ADDR, ALV_ADDR + Math.min(ALV_BYTES, Math.ceil(blocks / 8)));
+        for (let b = 0; b < used; b++) this.mem[ALV_ADDR + (b >> 3)] |= 0x80 >> (b & 7);
         this.resultHL(ALV_ADDR);
-        this.mem.fill(0, ALV_ADDR, ALV_ADDR + ALV_BYTES);
         break;
+      }
 
       case 28: // DRV_SETRO
         this.result(0);
@@ -611,26 +676,8 @@ export class Bdos {
       }
 
       case 31: { // DRV_DPB
-        const dpb = DPB_ADDR;
-        const current = this.currentDisk();
-        if (current.image) {
-          this.mem.set(current.image.dpb(), dpb);
-          this.resultHL(dpb);
-          break;
-        }
-        const bytes = [
-          0x40, 0x00, // SPT = 64
-          0x07, // BSH = 7 (16K blocks)
-          0x7f, // BLM = 127
-          0x00, // EXM = 0
-          0xff, 0x00, // DSM = 255 (4 MB drive)
-          0xff, 0x01, // DRM = 511
-          0xf0, 0x00, // AL0/AL1
-          0x00, 0x00, // CKS
-          0x02, 0x00, // OFF
-        ];
-        this.mem.set(bytes, dpb);
-        this.resultHL(dpb);
+        this.mem.set(this.currentDisk().format.dpb(), DPB_ADDR);
+        this.resultHL(DPB_ADDR);
         break;
       }
 

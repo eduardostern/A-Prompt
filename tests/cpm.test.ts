@@ -337,6 +337,44 @@ describe('CP/M 2.2 compatibility', () => {
     expect(machine.disk.find(3, '$$$     ', 'SUB')).toBeUndefined();
   });
 
+  it('fills a file drive block by block until the disk is full', async () => {
+    const { machine } = boot();
+    // F_MAKE BIG.DAT, then F_WRITE until it fails; store the error at 0200h.
+    await run(machine, [
+      ...bdos(22, 0x5c),
+      ...bdos(21, 0x5c),
+      0xb7, 0xca, 0x08, 0x01,
+      0x32, 0x00, 0x02, 0xc9,
+    ], 'PROBE BIG.DAT');
+    expect(machine.mem[0x0200]).toBe(2);
+    const big = machine.disk.find(0, 'BIG     ', 'DAT')!;
+    const others = machine.disk.files.filter((f) => f !== big)
+      .reduce((n, f) => n + Math.ceil(f.data.length / 2048), 0);
+    expect(big.data.length).toBe((2048 - 16 - others) * 2048);
+  });
+
+  it('STAT reports the free space of the drive', async () => {
+    const { machine, con } = boot();
+    machine.disk.put('BIG', 'DAT', new Uint8Array(100_000));
+    const used = machine.disk.files.reduce((n, f) => n + Math.ceil(f.data.length / 2048), 0);
+    await run(machine, [], 'PROBE');
+    await machine.runCom(machine.disk.find(0, 'STAT    ', 'COM')!, 'STAT');
+    expect(con.output).toContain(`A: R/W, Space: ${(2048 - 16 - used) * 2}k`);
+    await machine.runCom(machine.disk.find(0, 'STAT    ', 'COM')!, 'STAT BIG.DAT');
+    // 100000 bytes = 782 records in 49 2K blocks (98k) and 7 16K extents.
+    expect(con.output).toMatch(/782\s+98k\s+7 R\/W A:BIG\.DAT/);
+  });
+
+  it('keeps the prompt on its drive after a program resets the disks', async () => {
+    const { machine } = boot();
+    const hello = machine.disk.find(0, 'HELLO   ', 'COM')!;
+    machine.drives[1].put('RESET', 'COM', new Uint8Array([...bdos(13, 0), 0xc9]));
+    machine.drives[1].put(hello.name, hello.ext, hello.data);
+    await machine.ccp.execute('B:');
+    await machine.ccp.execute('RESET');
+    expect(machine.bdos.drive).toBe(1);
+  });
+
   it('limits the Z80 clock when clockHz is set', async () => {
     const { machine } = boot();
     // 65536 iterations of DCX B / MOV A,B / ORA C / JNZ = 24 T-states each.

@@ -2,8 +2,8 @@
  * In-memory CP/M disk.
  *
  * Files are stored as plain byte arrays, but they are exposed to guest software
- * through CP/M 8.3 names, user areas and 128-byte records.  A single drive (A:)
- * is emulated; its capacity is only limited by MAX_BYTES.
+ * through CP/M 8.3 names, user areas and 128-byte records.  A drive is either
+ * a plain file store (FILE_DRIVE_FORMAT) or backed by a raw disk image.
  */
 
 import { DiskImage } from './image';
@@ -11,6 +11,54 @@ import { DiskImage } from './image';
 export const MAX_BYTES = 4 * 1024 * 1024;
 const RECORD = 128;
 const EXTENT_BYTES = 16 * 1024;
+
+/**
+ * How a drive looks to CP/M: the DPB that BDOS 31 reports and the layout of
+ * the directory entries returned by search first/next.
+ */
+export interface DriveFormat {
+  blockSize: number;
+  /** Logical 16K extents per directory entry (EXM + 1). */
+  extentsPerEntry: number;
+  /** 16-bit block pointers (DSM > 255), eight per entry. */
+  wide: boolean;
+  dsm: number;
+  /** Blocks taken by the directory, at the start of the disk. */
+  reservedBlocks: number;
+  dirEntries: number;
+  dpb(): number[];
+}
+
+/**
+ * Format reported for drives without an image: 2K blocks, 4 MB, 1024
+ * directory entries, like a CP/M 2.2 hard disk.  DSM > 255 means 16-bit
+ * block pointers and EXM = 0 (one 16K extent per entry).
+ */
+export const FILE_DRIVE_FORMAT: DriveFormat = {
+  blockSize: 2048,
+  extentsPerEntry: 1,
+  wide: true,
+  dsm: 2047,
+  reservedBlocks: 16,
+  dirEntries: 1024,
+  dpb: () => [
+    0x40, 0x00, // SPT = 64
+    0x04, 0x0f, 0x00, // BSH = 4, BLM = 15, EXM = 0
+    0xff, 0x07, // DSM = 2047
+    0xff, 0x03, // DRM = 1023
+    0xff, 0xff, // AL0/AL1: 16 directory blocks
+    0x00, 0x00, // CKS
+    0x02, 0x00, // OFF
+  ],
+};
+
+/** Blocks and directory entries a file of `length` bytes takes in `fmt`. */
+export function allocation(fmt: DriveFormat, length: number): { blocks: number; entries: number } {
+  return {
+    blocks: Math.ceil(length / fmt.blockSize),
+    entries: Math.max(1, Math.ceil(length / (fmt.extentsPerEntry * EXTENT_BYTES))),
+  };
+}
 
 export interface CpmFile {
   user: number;
@@ -143,6 +191,30 @@ export class Disk {
     return image.toBytes();
   }
 
+  /** The CP/M format of this drive. */
+  get format(): DriveFormat {
+    return this.image ?? FILE_DRIVE_FORMAT;
+  }
+
+  /**
+   * Whether a program may store `file` (null: a new file) with `length`
+   * bytes: CP/M counts whole blocks and directory entries, so a drive fills
+   * up the way a real disk would.
+   */
+  canStore(file: CpmFile | null, length: number): boolean {
+    const fmt = this.format;
+    let blocks = 0;
+    let entries = 0;
+    const add = (n: number) => {
+      const a = allocation(fmt, n);
+      blocks += a.blocks;
+      entries += a.entries;
+    };
+    for (const f of this.files) add(f === file ? length : f.data.length);
+    if (!file) add(length);
+    return blocks <= fmt.dsm + 1 - fmt.reservedBlocks && entries <= fmt.dirEntries;
+  }
+
   usedBytes(): number {
     return this.files.reduce((n, f) => n + f.data.length, 0);
   }
@@ -215,11 +287,6 @@ export class Disk {
   /** Number of 128-byte records in the file. */
   static records(f: CpmFile): number {
     return Math.ceil(f.data.length / RECORD);
-  }
-
-  /** Number of 16K extents the file occupies (always at least one). */
-  static extents(f: CpmFile): number {
-    return Math.max(1, Math.ceil(f.data.length / EXTENT_BYTES));
   }
 
   /** Records used in the given extent (0-128). */
