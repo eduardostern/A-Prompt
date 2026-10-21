@@ -3,6 +3,7 @@
 [![Live demo](https://img.shields.io/badge/live-a--prompt.stern.workers.dev-5ee08f?style=flat-square)](https://a-prompt.stern.workers.dev)
 [![CI](https://github.com/eduardostern/A-Prompt/actions/workflows/ci.yml/badge.svg)](https://github.com/eduardostern/A-Prompt/actions/workflows/ci.yml)
 [![GitHub](https://img.shields.io/badge/source-GitHub-181717?style=flat-square)](https://github.com/eduardostern/A-Prompt)
+[![Games](https://img.shields.io/badge/games-RetroArchive-e3d27c?style=flat-square)](http://www.retroarchive.org/cpm/games/games.htm)
 [![License: MIT](https://img.shields.io/badge/license-MIT-5ee08f?style=flat-square)](LICENSE)
 
 **A-Prompt** is a CP/M 2.2 emulator for the browser, written from scratch in
@@ -71,9 +72,15 @@ A>DATE
 
 ## Running games
 
+**Archive:** <http://www.retroarchive.org/cpm/games/games.htm>
+
+Direct downloads:
+[Sargon 2.1](http://www.retroarchive.org/cpm/games/sargon.zip) ·
+[Zork I–III](http://www.retroarchive.org/cpm/games/zork123_80.zip) ·
+[Adventure + many games](http://www.retroarchive.org/cpm/games/manygame.zip)
+
 Most CP/M `.COM` games work if you upload the program and any data files with
-their exact 8.3 names. Tested from
-[retroarchive.org/cpm/games](http://www.retroarchive.org/cpm/games/games.htm):
+their exact 8.3 names. Tested from that archive:
 
 - **Sargon 2.1** (`SARGON.COM`) — plays normally.
 - **Zork I** (`ZORK1.COM` + `ZORK1.DAT`) — intro, movement and parser work.
@@ -82,7 +89,13 @@ their exact 8.3 names. Tested from
   the game.
 
 Select ADM-3A or VT52 in the console toolbar if a game assumes one of those
-terminals. Games are not bundled with A-Prompt; uploads stay in your browser.
+terminals.
+
+**Copyright:** old does not mean public domain. Zork, Sargon and most 1980s
+titles are still protected (in the US, works published after 1978 are commonly
+protected for 95 years). A-Prompt does not bundle or redistribute these games;
+the links point to RetroArchive, which hosts them for preservation. Check the
+terms of each archive and your local law before downloading.
 
 ## Deploy on Cloudflare
 

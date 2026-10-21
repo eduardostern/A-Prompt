@@ -486,6 +486,22 @@ body::after {
 
 .device-row .chip { padding: 4px 7px; font-size: 9px; }
 
+.games p {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #b9cdc1;
+}
+
+.games .btn { text-decoration: none; margin-bottom: 8px; }
+
+.games .tiny {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
 /* ---- footer ---------------------------------------------------------- */
 
 .footer {
