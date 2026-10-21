@@ -723,3 +723,250 @@ body::after {
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; scroll-behavior: auto; }
 }
+
+/* ---- full-height workspace ------------------------------------------- */
+
+html, body { height: 100%; }
+
+body { overflow: hidden; }
+
+.app {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  padding-top: 16px;
+  padding-bottom: 8px;
+}
+
+.topbar { flex: 0 0 auto; padding-bottom: 14px; }
+
+.layout {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  gap: 16px;
+  padding: 12px 0 8px;
+  align-items: stretch;
+}
+
+.console-panel {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.terminal-wrap {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+}
+
+.sidebar {
+  width: 360px;
+  flex: 0 0 360px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 5px 6px 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-2) transparent;
+}
+
+.sidebar::-webkit-scrollbar { width: 8px; }
+.sidebar::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 99px; }
+.sidebar::-webkit-scrollbar-track { background: transparent; }
+
+.sidebar-head {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 0 0 auto;
+  padding: 2px 2px 8px;
+  background: linear-gradient(180deg, var(--bg) 70%, transparent);
+}
+
+.sidebar-head > span {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.sidebar-close { display: none; }
+
+.panel-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: auto;
+  height: 26px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.panel-toggle-label {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.panel-toggle:hover,
+.panel-toggle.is-on {
+  color: var(--green);
+  border-color: var(--line-2);
+  background: rgba(94, 224, 143, 0.06);
+}
+
+/* The sidebar is a rail; details keep the long panels compact. */
+.card.collapsible {
+  flex: 0 0 auto;
+  padding: 0;
+  overflow: hidden;
+}
+
+.card.collapsible > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 13px 16px;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.card.collapsible > summary::-webkit-details-marker { display: none; }
+
+.card.collapsible > summary::after {
+  content: '+';
+  font-size: 15px;
+  line-height: 1;
+  color: var(--muted);
+}
+
+.card.collapsible[open] > summary {
+  color: var(--text);
+  border-bottom: 1px solid var(--line);
+}
+
+.card.collapsible[open] > summary::after { content: '−'; }
+
+.card.collapsible > :not(summary) {
+  margin-left: 16px;
+  margin-right: 16px;
+}
+
+.card.collapsible > :nth-child(2) { margin-top: 12px; }
+.card.collapsible > :last-child { margin-bottom: 14px; }
+
+/* A single scroll for the rail; keep the drive list bounded. */
+.file-list {
+  max-height: 320px;
+  overflow-y: auto;
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 16px), transparent);
+  margin-bottom: 10px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-2) transparent;
+  scrollbar-gutter: stable;
+}
+
+.file-list::-webkit-scrollbar { width: 6px; }
+.file-list::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 99px; }
+
+.file-row { padding: 6px; }
+.file-name { font-size: 11px; }
+
+.footer { flex: 0 0 auto; padding: 9px 2px 2px; }
+
+@media (min-width: 901px) {
+  body.panels-hidden .sidebar { display: none; }
+}
+
+@media (max-width: 900px) {
+  .app { padding: 10px 12px 8px; }
+
+  .topbar { padding-bottom: 10px; }
+
+  .layout {
+    display: block;
+    padding: 8px 0 4px;
+    min-height: 0;
+  }
+
+  .console-panel { height: 100%; }
+
+  .terminal-wrap { height: 100%; }
+
+  .sidebar {
+    position: fixed;
+    top: 0;
+    right: 0;
+    z-index: 40;
+    width: min(92vw, 380px);
+    height: 100dvh;
+    padding: 14px 14px 24px;
+    background: var(--panel-2);
+    border-left: 1px solid var(--line-2);
+    box-shadow: -24px 0 80px rgba(0, 0, 0, 0.55);
+    transform: translateX(105%);
+    transition: transform 0.22s ease;
+  }
+
+  body.panels-open .sidebar { transform: translateX(0); }
+
+  .sidebar-head {
+    margin: -14px -14px 0;
+    padding: 14px 14px 10px;
+    background: var(--panel-2);
+  }
+
+  .sidebar-close { display: grid; }
+
+  .panel-toggle {
+    width: 28px;
+    padding: 0;
+  }
+
+  .panel-toggle-label { display: none; }
+
+  .sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 35;
+    background: rgba(2, 7, 4, 0.66);
+    backdrop-filter: blur(2px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+  }
+
+  body.panels-open .sidebar-backdrop {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .footer { display: none; }
+}

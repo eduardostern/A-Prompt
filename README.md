@@ -37,6 +37,8 @@ npm run preview  # serve the build
 
 There is no backend and no WebAssembly: `dist/` is a plain static site.
 
+The terminal fills the viewport. Use **Panels** in the console toolbar to hide or show the right rail; its sections collapse and scroll independently (on mobile the rail becomes a drawer).
+
 ## What works
 
 - **Z80 CPU**: documented and undocumented instructions (SLL, IXH/IXL, DDCB,

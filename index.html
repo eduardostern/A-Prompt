@@ -33,6 +33,7 @@
           <div class="panel-bar">
             <span class="panel-title" id="console-drive">Console · A:</span>
             <div class="panel-tools">
+              <button id="sidebar-toggle" class="panel-toggle" type="button" aria-expanded="true" aria-controls="sidebar" title="Show/hide panels" aria-label="Show or hide panels">▤ <span class="panel-toggle-label">Panels</span></button>
               <select id="terminal-type" class="terminal-select" aria-label="Terminal emulation" title="Terminal emulation">
                 <option value="ansi">ANSI / VT100</option>
                 <option value="adm3a">ADM-3A</option>
@@ -53,7 +54,12 @@
           </div>
         </section>
 
-        <aside class="sidebar">
+        <aside class="sidebar" id="sidebar">
+          <div class="sidebar-head">
+            <span>Panels</span>
+            <button id="sidebar-close" class="icon-btn sidebar-close" type="button" aria-label="Close panels">✕</button>
+          </div>
+
           <section class="card drive-card">
             <div class="card-head">
               <h2 id="drive-title">Drive A:</h2>
@@ -85,8 +91,8 @@
             <button id="reset-btn" class="btn btn-ghost" type="button">Restore original drive</button>
           </section>
 
-          <section class="card">
-            <h2>Shortcuts</h2>
+          <details class="card collapsible" open>
+            <summary><span class="card-title">Shortcuts</span></summary>
             <div class="chips">
               <button class="chip" data-cmd="HELP" type="button">HELP</button>
               <button class="chip" data-cmd="DIR" type="button">DIR</button>
@@ -95,10 +101,10 @@
               <button class="chip" data-cmd="TYPE HELLO.ASM" type="button">TYPE .ASM</button>
               <button class="chip" data-cmd="CLS" type="button">CLS</button>
             </div>
-          </section>
+          </details>
 
-          <section class="card devices">
-            <h2>Devices</h2>
+          <details class="card collapsible">
+            <summary><span class="card-title">Devices</span></summary>
             <div class="device-row">
               <span class="device-name">Printer</span>
               <span id="printer-count" class="device-count">0 B</span>
@@ -111,10 +117,10 @@
               <button id="serial-download" class="chip" type="button">Download</button>
               <button id="serial-clear" class="chip" type="button">Clear</button>
             </div>
-          </section>
+          </details>
 
-          <section class="card software">
-            <h2>Software</h2>
+          <details class="card collapsible">
+            <summary><span class="card-title">Software</span></summary>
             <p>
               The CP/M classics. Download the original files, then install
               them like a game.
@@ -130,10 +136,10 @@
             <button id="software-zip-btn" class="btn btn-ghost" type="button">Install .zip</button>
             <p class="tiny">Zips: Install .zip. MBASIC is a single .COM: use Import files. Then WINSTALL→WS, MBASIC, DBASE, TINST→TURBO, INSTALL→SC. dBASE II: extract DBASE-II/CPM80/V2-3B from ASHTONPAK. SuperCalc 1.x is experimental.</p>
             <a class="game-guide" href="https://github.com/eduardostern/A-Prompt#software" target="_blank" rel="noreferrer">Step-by-step guide ↗</a>
-          </section>
+          </details>
 
-          <section class="card games">
-            <h2>Games</h2>
+          <details class="card collapsible">
+            <summary><span class="card-title">Games</span></summary>
             <p>
               Sargon, Zork, Adventure and hundreds of other CP/M programs.
               Download a zip, then drop it here — A-Prompt installs the files
@@ -152,7 +158,7 @@
             </a>
             <p class="tiny">Games are not bundled. They are still copyrighted by their authors. Some need setup: TERMDEF/PERSON (Nemesis) or USQ (Adventure).</p>
             <a class="game-guide" href="https://github.com/eduardostern/A-Prompt#running-games" target="_blank" rel="noreferrer">Step-by-step guide ↗</a>
-          </section>
+          </details>
 
           <section class="card about" id="about">
             <h2>About</h2>
@@ -176,6 +182,7 @@
             <p class="muted">
               <a href="#" class="info-open">What is CP/M? History, Z80 and VisiCalc →</a>
             </p>
+            <p class="muted">A-Prompt © 2026 Eduardo Stern · MIT.</p>
           </section>
         </aside>
       </main>
@@ -189,6 +196,8 @@
         <span class="mono">CP/M 2.2 · 1979 · Digital Research</span>
       </footer>
     </div>
+
+    <div id="sidebar-backdrop" class="sidebar-backdrop"></div>
 
     <dialog id="cpm-info" class="info-dialog">
       <article>

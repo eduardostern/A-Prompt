@@ -11,6 +11,7 @@ import { CpmFile, MAX_BYTES, displayName, padExt, padName, trimName } from './cp
 const LS_PREFIX = 'a-prompt.drive.';
 const LEGACY_LS_KEY = 'a-prompt.drive.v1';
 const TERM_KEY = 'a-prompt.terminal';
+const PANEL_KEY = 'a-prompt.panels';
 const MAX_UPLOAD = 512 * 1024;
 
 const letterFor = (index: number): string => String.fromCharCode(65 + index);
@@ -182,17 +183,63 @@ const printerClear = el<HTMLButtonElement>('printer-clear');
 const serialDownload = el<HTMLButtonElement>('serial-download');
 const serialClear = el<HTMLButtonElement>('serial-clear');
 const consolePanel = document.querySelector<HTMLElement>('.console-panel')!;
+const sidebar = el<HTMLElement>('sidebar');
+const sidebarToggle = el<HTMLButtonElement>('sidebar-toggle');
+const sidebarClose = el<HTMLButtonElement>('sidebar-close');
+const sidebarBackdrop = el('sidebar-backdrop');
 const infoDialog = el<HTMLDialogElement>('cpm-info');
 
 document.querySelectorAll<HTMLAnchorElement>('.info-open').forEach((link) => {
   link.addEventListener('click', (ev) => {
     ev.preventDefault();
+    if (isMobileLayout()) setPanels(false);
     infoDialog.showModal();
   });
 });
 infoDialog.querySelector<HTMLButtonElement>('.info-close')?.addEventListener('click', () => infoDialog.close());
 infoDialog.addEventListener('click', (ev) => {
   if (ev.target === infoDialog) infoDialog.close();
+});
+
+// ---- panel rail -------------------------------------------------------
+
+const isMobileLayout = (): boolean => window.matchMedia('(max-width: 900px)').matches;
+let panelsOpen = !isMobileLayout();
+let wasMobile = isMobileLayout();
+
+function setPanels(open: boolean, persist = true): void {
+  const mobile = isMobileLayout();
+  panelsOpen = open;
+  document.body.classList.toggle('panels-open', mobile && open);
+  document.body.classList.toggle('panels-hidden', !mobile && !open);
+  sidebarToggle.classList.toggle('is-on', open);
+  sidebarToggle.setAttribute('aria-expanded', String(open));
+  if (persist) {
+    try {
+      localStorage.setItem(PANEL_KEY, open ? 'open' : 'closed');
+    } catch {
+      /* ignore */
+    }
+  }
+  if (persist && mobile && open) {
+    window.setTimeout(() => sidebarClose.focus(), 40);
+  }
+}
+
+sidebarToggle.addEventListener('click', () => setPanels(!panelsOpen));
+sidebarClose.addEventListener('click', () => {
+  setPanels(false);
+  con.focus();
+});
+sidebarBackdrop.addEventListener('click', () => {
+  setPanels(false);
+  con.focus();
+});
+document.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Escape' && panelsOpen && isMobileLayout()) {
+    setPanels(false);
+    con.focus();
+  }
 });
 
 
@@ -639,6 +686,10 @@ machine.onBusy = (busy) => {
 
 window.addEventListener('resize', () => {
   applyFontSize();
+  const mobile = isMobileLayout();
+  if (mobile && !wasMobile) setPanels(false, false);
+  else setPanels(panelsOpen, false);
+  wasMobile = mobile;
   con.fit();
 });
 new ResizeObserver(() => con.fit()).observe(el('terminal'));
@@ -658,6 +709,8 @@ consolePanel.addEventListener('click', (e) => {
 loadBuiltins();
 for (let i = 0; i < drives.length; i++) restoreDrive(i);
 applyTerminalType(localStorage.getItem(TERM_KEY) ?? 'ansi', false);
+const savedPanels = localStorage.getItem(PANEL_KEY);
+setPanels(isMobileLayout() ? false : savedPanels ? savedPanels === 'open' : true, false);
 renderFiles();
 renderDevices();
 updateClock();
