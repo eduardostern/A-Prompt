@@ -115,13 +115,20 @@
             <h2>Games</h2>
             <p>
               Sargon, Zork, Adventure and hundreds of other CP/M programs.
-              Download a zip, extract the <b>.COM</b> and its data files, then
-              drop them on a drive.
+              Download a zip, then drop it here — A-Prompt installs the files
+              and runs the game when there is a single obvious .COM.
             </p>
-            <a class="btn btn-primary" href="http://www.retroarchive.org/cpm/games/games.htm" target="_blank" rel="noreferrer">
+            <div class="game-links">
+              <a href="http://www.retroarchive.org/cpm/games/sargon.zip" target="_blank" rel="noreferrer">Sargon ↓</a>
+              <a href="http://www.retroarchive.org/cpm/games/zork123_80.zip" target="_blank" rel="noreferrer">Zork I–III ↓</a>
+              <a href="http://www.retroarchive.org/cpm/games/manygame.zip" target="_blank" rel="noreferrer">Adventure + more ↓</a>
+            </div>
+            <input id="game-zip-input" type="file" accept=".zip" hidden />
+            <button id="game-zip-btn" class="btn btn-primary" type="button">Install game .zip</button>
+            <a class="btn btn-ghost" href="http://www.retroarchive.org/cpm/games/games.htm" target="_blank" rel="noreferrer">
               Browse RetroArchive ↗
             </a>
-            <p class="tiny">Games are not bundled. They are still copyrighted by their authors.</p>
+            <p class="tiny">Games are not bundled. They are still copyrighted by their authors. Very old Implode zips may need manual extraction.</p>
           </section>
 
           <section class="card about" id="about">

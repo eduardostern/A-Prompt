@@ -12,8 +12,11 @@ FCBs and user areas, a console, and a CCP with the classic commands. It runs
 the original Digital Research binaries distributed at
 [cpm.z80.de](http://www.cpm.z80.de).
 
-> **Built with [OpenCode](https://opencode.ai) + DeepSeek V4.1 Flash.**
-> No Claude or GPT model was involved.
+> **No Former-OpenAI tokens were harmed during the creation of this piece of software.**
+>
+> Built with [OpenCode](https://opencode.ai) + DeepSeek V4.1 Flash. No Claude,
+> GPT, or Grok was consulted, prompted, or otherwise awakened. The only
+> transformer involved is the one in the power supply.
 
 **Live demo:** <https://a-prompt.stern.workers.dev>
 
@@ -96,6 +99,11 @@ titles are still protected (in the US, works published after 1978 are commonly
 protected for 95 years). A-Prompt does not bundle or redistribute these games;
 the links point to RetroArchive, which hosts them for preservation. Check the
 terms of each archive and your local law before downloading.
+
+**Legacy zips:** the built-in installer handles standard ZIPs (Sargon,
+manygame). The Zork archive uses the old Implode method; extract it with your
+OS unzip tool and drop the `.COM`/`.DAT` files on a drive (or re-zip it with
+Deflate).
 
 ## Deploy on Cloudflare
 
@@ -185,6 +193,13 @@ ZEX=1 npm test             # adds the zexdoc/zexall exercisers (long)
 
 `zexdoc`/`zexall` are Frank Cringle's Z80 instruction exercisers (public
 domain) and live in `tests/fixtures/`.
+
+## AI provenance
+
+This project was built with [OpenCode](https://opencode.ai) and **DeepSeek
+V4.1 Flash**. No Claude, GPT, Grok, or other OpenAI/Anthropic/xAI model was
+involved — so no former-OpenAI tokens were harmed. The only transformer here
+is the one in the power supply.
 
 ## Credits and license
 

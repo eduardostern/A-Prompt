@@ -1,4 +1,5 @@
 import './style.css';
+import { unzip } from './zip';
 import { XtermConsole } from './terminal';
 import type { TerminalType } from './terminal-translator';
 import { CpmMachine } from './cpm/machine';
@@ -169,6 +170,8 @@ const dropzone = el('dropzone');
 const fileInput = el<HTMLInputElement>('file-input');
 const uploadBtn = el<HTMLButtonElement>('upload-btn');
 const resetBtn = el<HTMLButtonElement>('reset-btn');
+const gameZipInput = el<HTMLInputElement>('game-zip-input');
+const gameZipBtn = el<HTMLButtonElement>('game-zip-btn');
 const clockEl = el('clock');
 const printerCount = el('printer-count');
 const serialCount = el('serial-count');
@@ -370,6 +373,10 @@ async function importFiles(list: FileList | File[]): Promise<void> {
   const files = Array.from(list);
   let imported = 0;
   for (const file of files) {
+    if (file.name.toLowerCase().endsWith('.zip')) {
+      await installGameZip(file);
+      continue;
+    }
     if (file.size > MAX_UPLOAD) {
       con.write(`\r\n* ${file.name}: too large (512 KB maximum).\r\n`);
       continue;
@@ -393,6 +400,85 @@ async function importFiles(list: FileList | File[]): Promise<void> {
   fileList.scrollTop = fileList.scrollHeight;
   con.focus();
 }
+
+const GAME_EXTENSIONS = new Set(['COM', 'DAT', 'MSG', 'SUB', 'TXT', 'DOC', 'ASM', 'HEX']);
+
+async function installGameZip(file: File): Promise<void> {
+  if (machine.busy) {
+    con.write('\r\n* Wait for the running program to finish before installing a game.\r\n');
+    return;
+  }
+  if (file.size > 8 * 1024 * 1024) {
+    con.write(`\r\n* ${file.name}: archive too large (8 MB maximum).\r\n`);
+    return;
+  }
+  let entries: Record<string, Uint8Array>;
+  try {
+    entries = unzip(new Uint8Array(await file.arrayBuffer()));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : '';
+    if (/unsupported compression method 6/i.test(message)) {
+      con.write('\r\n* This is a legacy Implode .zip. Extract it with your system unzip tool and drop the .COM/.DAT files here.\r\n');
+    } else {
+      con.write(`\r\n* ${file.name}: could not read this archive.\r\n`);
+    }
+    return;
+  }
+
+  const targetDrive = activeDrive;
+  const disk = drives[targetDrive];
+  const letter = letterFor(targetDrive);
+  const coms: string[] = [];
+  let hasMqg = false;
+  let installed = 0;
+
+  for (const [path, data] of Object.entries(entries)) {
+    if (path.endsWith('/') || path.includes('__MACOSX')) continue;
+    const base = path.split('/').pop() ?? '';
+    if (!base || base.startsWith('.')) continue;
+    const dot = base.lastIndexOf('.');
+    const rawExt = dot > 0 ? base.slice(dot + 1).toUpperCase() : '';
+    if (rawExt === 'MQG') hasMqg = true;
+    if (!GAME_EXTENSIONS.has(rawExt) || data.length > MAX_UPLOAD) continue;
+
+    const cpm = toCpmName(base);
+    const target = uniqueName(disk, machine.bdos.user, cpm.name, cpm.ext);
+    if (!disk.put(target.name, target.ext, data, machine.bdos.user)) {
+      con.write(`\r\n* Disk full; ${base} was not installed.\r\n`);
+      break;
+    }
+    installed++;
+    if (trimName(target.ext) === 'COM') coms.push(trimName(target.name));
+  }
+
+  saveAllDrives();
+  renderFiles();
+  if (!installed) {
+    con.write(`\r\n* No CP/M files found in ${file.name}.\r\n`);
+    return;
+  }
+  con.write(`\r\n* Installed ${installed} file${installed === 1 ? '' : 's'} from ${file.name} on ${letter}:.\r\n`);
+
+  if (coms.length === 1 && !hasMqg) {
+    con.write(`* Running ${coms[0]}...\r\n`);
+    if (targetDrive !== machine.bdos.drive) con.send(`${letter}:\r\n`);
+    con.send(`${coms[0]}\r`);
+  } else if (coms.length > 1) {
+    con.write(`* Type ${letter}:${coms[0]} (or another .COM) to play.\r\n`);
+  } else if (hasMqg) {
+    con.write('* Run USQ on the .MQG file to decode the message file first.\r\n');
+  } else {
+    con.write('* No .COM to run.\r\n');
+  }
+  con.focus();
+}
+
+gameZipBtn.addEventListener('click', () => gameZipInput.click());
+gameZipInput.addEventListener('change', () => {
+  const file = gameZipInput.files?.[0];
+  gameZipInput.value = '';
+  if (file) void installGameZip(file);
+});
 
 uploadBtn.addEventListener('click', () => fileInput.click());
 fileInput.addEventListener('change', () => {

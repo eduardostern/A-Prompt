@@ -495,6 +495,32 @@ body::after {
 
 .games .btn { text-decoration: none; margin-bottom: 8px; }
 
+.games .btn-ghost { margin-top: 0; }
+
+.game-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 0 0 10px;
+}
+
+.game-links a {
+  padding: 4px 7px;
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 9px;
+  text-decoration: none;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.game-links a:hover {
+  color: var(--green);
+  border-color: var(--line-2);
+  background: rgba(94, 224, 143, 0.05);
+}
+
 .games .tiny {
   margin: 0;
   font-size: 10px;
