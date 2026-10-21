@@ -486,7 +486,9 @@ async function installGameZip(file: File): Promise<void> {
     if (targetDrive !== machine.bdos.drive) con.send(`${letter}:\r\n`);
     con.send(`${coms[0]}\r`);
   } else if (coms.length > 1) {
-    con.write(`* Type ${letter}:${preferred ?? coms[0]} (or another .COM) to play.\r\n`);
+    const setup = coms.find((name) => /^(W?INSTALL|TINST)$/i.test(name));
+    const first = preferred ?? setup ?? coms[0];
+    con.write(`* Type ${letter}:${first} to start. Installed: ${coms.slice(0, 6).join(', ')}.\r\n`);
   } else if (hasMqg) {
     con.write('* Run USQ on the .MQG file to decode the message file first.\r\n');
   } else {

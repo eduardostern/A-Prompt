@@ -215,6 +215,50 @@ npx wrangler pages deploy dist
 In both cases, uploads and files created inside CP/M are stored in the
 visitor's browser (`localStorage`), so every visitor has their own drive A:.
 
+## Software
+
+These are the CP/M classics. A-Prompt does not bundle them; download the
+original files from RetroArchive and install them with **Install .zip** (or
+**Import files** for a single `.COM`).
+
+### WordStar 3.3
+
+1. Download [WS330.zip](http://www.retroarchive.org/cpm/text/WS330.zip).
+2. **Install .zip** → `WS330.zip`.
+3. Run `WINSTALL` and choose your terminal (ANSI Standard).
+4. Start the editor with `WS` (or `WSU` after installation).
+
+### MBASIC / BASIC-80 5.21
+
+1. Download [Mbasic.com](http://www.retroarchive.org/cpm/lang/Mbasic.com).
+2. Drag the `.COM` onto drive A (or **Import files**).
+3. Run `MBASIC`; you should see `BASIC-80 Rev. 5.21` and an `Ok` prompt.
+4. Leave BASIC with `SYSTEM`.
+
+### dBASE II 2.43
+
+1. Download [dbaseii.zip](http://www.retroarchive.org/cpm/dbase/dbaseii.zip).
+2. **Install .zip** → `dbaseii.zip` (installs `DBASE.COM`, `DBASEOVR.COM`
+   and `DBASEMSG.TXT`).
+3. Run `DBASE`.
+
+### Turbo Pascal 3
+
+1. Download [tpas30.zip](http://www.retroarchive.org/cpm/lang/tpas30.zip).
+2. **Install .zip** → `tpas30.zip`.
+3. Run `TINST` once to set your terminal, then `TURBO`.
+
+### SuperCalc 1.x / 2
+
+1. Download [Suprcalc.zip](http://www.retroarchive.org/cpm/business/Suprcalc.zip)
+   or [sc2.zip](http://www.retroarchive.org/cpm/business/sc2.zip).
+2. **Install .zip**.
+3. Run `INSTALL` → `M` (ANSI Standard) → confirm → `A` save → `X` quit.
+4. Start with `SC` (or `SC2`).
+
+All of these are still copyrighted; the links point to the original archive.
+The emulator only installs files you download.
+
 ## Disk images
 
 Drives A:–D: are host-folder drives by default. Use **Export .dsk** to turn
