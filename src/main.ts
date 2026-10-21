@@ -172,6 +172,7 @@ const uploadBtn = el<HTMLButtonElement>('upload-btn');
 const resetBtn = el<HTMLButtonElement>('reset-btn');
 const gameZipInput = el<HTMLInputElement>('game-zip-input');
 const gameZipBtn = el<HTMLButtonElement>('game-zip-btn');
+const softwareZipBtn = el<HTMLButtonElement>('software-zip-btn');
 const clockEl = el('clock');
 const printerCount = el('printer-count');
 const serialCount = el('serial-count');
@@ -495,6 +496,7 @@ async function installGameZip(file: File): Promise<void> {
 }
 
 gameZipBtn.addEventListener('click', () => gameZipInput.click());
+softwareZipBtn.addEventListener('click', () => gameZipInput.click());
 gameZipInput.addEventListener('change', () => {
   const file = gameZipInput.files?.[0];
   gameZipInput.value = '';

@@ -261,21 +261,36 @@ same binary could run on completely different machines.
 MBASIC, FORTRAN, COBOL, assemblers, and games such as Sargon, Zork, Adventure
 and Nemesis.
 
-### Where is VisiCalc?
+### VisiCalc and SuperCalc
 
 VisiCalc (1979, Dan Bricklin and Bob Frankston) was the first spreadsheet and
 the “killer app” of personal computing. It did have CP/M ports, but they were
 niche: the **HP 125** and **Sony SMC-70** versions are the CP/M releases. The
-mass-market VisiCalc ran on the Apple II, Atari, TRS-80 and IBM PC. The
-spreadsheet usually bundled with CP/M business machines was **SuperCalc**.
+mass-market VisiCalc ran on the Apple II, Atari, TRS-80 and IBM PC.
 
-A-Prompt does not bundle VisiCalc or SuperCalc — both are still copyrighted.
-If you have a CP/M `.COM`, upload it to a drive and run it. SuperCalc archives
-are available at
-[RetroArchive](http://www.retroarchive.org/cpm/business/business.htm).
+The spreadsheet that actually shipped with CP/M business machines was
+**SuperCalc** (Sorcim, 1980; bundled with the Osborne 1). A-Prompt links to it
+from the **Software** card:
+
+- [SuperCalc 1.x](http://www.retroarchive.org/cpm/business/Suprcalc.zip)
+- [SuperCalc 2](http://www.retroarchive.org/cpm/business/sc2.zip)
+
+Install the zip, then configure the terminal once:
+
+```text
+A>INSTALL
+```
+
+Answer `Y`, choose `M` (ANSI Standard), confirm, then `A` to save and `X` to
+quit. Start it with `SC` (or `SC2` for version 2). Neither program is bundled;
+both are still copyrighted.
+
+A-Prompt does not bundle VisiCalc or SuperCalc. If you have a CP/M `.COM`,
+upload it to a drive and run it.
 
 - [CP/M on Wikipedia](https://en.wikipedia.org/wiki/CP/M)
 - [VisiCalc on Wikipedia](https://en.wikipedia.org/wiki/VisiCalc)
+- [SuperCalc on Wikipedia](https://en.wikipedia.org/wiki/SuperCalc)
 
 ## Architecture
 

@@ -493,6 +493,24 @@ body::after {
   color: #b9cdc1;
 }
 
+.software p {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #b9cdc1;
+}
+
+.software code {
+  padding: 1px 4px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--green);
+  font-family: var(--mono);
+  font-size: 10px;
+}
+
+.software .btn-ghost { margin-top: 0; }
+
 .games .btn { text-decoration: none; margin-bottom: 8px; }
 
 .games .btn-ghost { margin-top: 0; }
