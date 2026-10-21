@@ -48,31 +48,47 @@ A>LOAD HELLO
 A>SUBMIT DEMO
 ```
 
-## Deploy on Cloudflare Pages
+## Deploy on Cloudflare
 
-A-Prompt is a static site: no server, no environment variables, no database.
-The whole CP/M disk image is embedded in the JavaScript bundle.
+A-Prompt is a static site: no server code, no environment variables, no
+database. The whole CP/M disk image is embedded in the JavaScript bundle.
 
-**Dashboard**
+### Workers (current dashboard flow)
 
-1. Push the repository to GitHub/GitLab.
-2. In Cloudflare Pages, choose **Connect to Git** and select the repo.
-3. Framework preset: **None** (or **Vite**).
-4. Build command: `npm run build`
-5. Build output directory: `dist`
-6. Node version: 22 (the repo includes `.nvmrc`).
+1. **Workers & Pages → Create → Connect to Git** and select the repo.
+2. Build command: `npm run build`
+3. Deploy command: `npx wrangler deploy`
+4. Node version: 22 (the repo includes `.nvmrc`).
+5. Deploy.
 
-**CLI**
+`wrangler.toml` publishes `./dist` as **Workers Static Assets**; no Worker
+script is needed.
+
+From the CLI:
+
+```bash
+npm run build
+npx wrangler deploy
+```
+
+### Pages (legacy flow)
+
+If you prefer the Pages workflow, click **“Continue to Pages”** on the create
+screen and use:
+
+- Build command: `npm run build`
+- Build output directory: `dist`
+- Node version: 22
+
+Or deploy from the CLI:
 
 ```bash
 npm run build
 npx wrangler pages deploy dist
 ```
 
-`wrangler.toml` already points to `dist` as the build output, so
-`npx wrangler pages deploy` also works without arguments. Uploads and files
-created inside CP/M are stored in the visitor's browser (`localStorage`), so
-each visitor has their own drive A:.
+In both cases, uploads and files created inside CP/M are stored in the
+visitor's browser (`localStorage`), so every visitor has their own drive A:.
 
 ## Limitations
 
