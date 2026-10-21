@@ -4,6 +4,7 @@
 [![CI](https://github.com/eduardostern/A-Prompt/actions/workflows/ci.yml/badge.svg)](https://github.com/eduardostern/A-Prompt/actions/workflows/ci.yml)
 [![GitHub](https://img.shields.io/badge/source-GitHub-181717?style=flat-square)](https://github.com/eduardostern/A-Prompt)
 [![Games](https://img.shields.io/badge/games-RetroArchive-e3d27c?style=flat-square)](http://www.retroarchive.org/cpm/games/games.htm)
+[![Build cost](https://img.shields.io/badge/build%20cost-%3C%241-5ee08f?style=flat-square)](#ai-provenance)
 [![License: MIT](https://img.shields.io/badge/license-MIT-5ee08f?style=flat-square)](LICENSE)
 
 **A-Prompt** is a CP/M 2.2 emulator for the browser, written from scratch in
@@ -14,9 +15,11 @@ the original Digital Research binaries distributed at
 
 > **No Former-OpenAI tokens were harmed during the creation of this piece of software.**
 >
-> Built with [OpenCode](https://opencode.ai) + DeepSeek V4.1 Flash. No Claude,
-> GPT, or Grok was consulted, prompted, or otherwise awakened. The only
-> transformer involved is the one in the power supply.
+> Built with [OpenCode](https://opencode.ai) + DeepSeek V4.1 Flash for **under $1**
+> in model tokens — the build run cost **$0.92**, other experiments excluded.
+> No Claude, GPT, or Grok was consulted, prompted, or otherwise awakened. Yes,
+> DeepSeek is a transformer too — the only *other* transformer involved is the
+> one in the power supply.
 
 **Live demo:** <https://a-prompt.stern.workers.dev>
 
@@ -386,9 +389,11 @@ domain) and live in `tests/fixtures/`.
 ## AI provenance
 
 This project was built with [OpenCode](https://opencode.ai) and **DeepSeek
-V4.1 Flash**. No Claude, GPT, Grok, or other OpenAI/Anthropic/xAI model was
-involved — so no former-OpenAI tokens were harmed. The only transformer here
-is the one in the power supply.
+V4.1 Flash** for **less than $1 in model tokens** — the build run cost
+**$0.92**; other experiments are not included. No Claude, GPT, Grok, or other
+OpenAI/Anthropic/xAI model was involved. DeepSeek is itself a transformer, of
+course; the only *other* transformer here is the one in the power supply. No
+former-OpenAI tokens were harmed.
 
 ## Author
 
