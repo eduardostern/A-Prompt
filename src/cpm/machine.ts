@@ -40,6 +40,10 @@ export class CpmMachine {
 
   private warm = false;
   private stopped = false;
+  private biosDisk = 0;
+  private biosTrack = 0;
+  private biosSector = 0;
+  private biosDma = 0x0080;
 
   constructor(readonly console: ConsoleIO) {
     this.mem = this.cpu.mem;
@@ -120,6 +124,36 @@ export class CpmMachine {
 
   forgetFile(file: CpmFile): void {
     this.bdos.forget(file);
+  }
+
+  /** Flush raw image writes or rebuild images after BDOS file writes. */
+  syncImages(): void {
+    for (const drive of this.drives) drive.syncImage();
+  }
+
+  private buildDph(disk: Disk): number {
+    const image = disk.image!;
+    const m = this.mem;
+    const dpb = 0xfd40;
+    const dph = 0xfb00;
+    const dirbuf = 0xfb10;
+    const alv = 0xfd50;
+    m.set(image.dpb(), dpb);
+    const d = new Uint8Array(16);
+    const put = (off: number, value: number) => {
+      d[off] = value & 0xff;
+      d[off + 1] = (value >> 8) & 0xff;
+    };
+    put(0, 0); // XLT
+    put(2, 0); put(4, 0); put(6, 0); // scratch
+    put(8, dirbuf);
+    put(10, dpb);
+    put(12, 0); // CSV
+    put(14, alv);
+    m.set(d, dph);
+    m.fill(0, dirbuf, dirbuf + 128);
+    m.fill(0, alv, alv + Math.ceil((image.geometry.dsm + 1) / 8));
+    return dph;
   }
 
   private ensureNewline(): void {
@@ -216,6 +250,7 @@ export class CpmMachine {
         this.console.write(`\r\n* ${(e as Error).message}\r\n`);
       }
     } finally {
+      this.syncImages();
       this.busy = false;
       this.onBusy?.(false);
       this.warm = false;
@@ -252,25 +287,60 @@ export class CpmMachine {
         cpu.a = 0x1a;
         break;
       case 8: // HOME
+        this.biosTrack = 0;
         cpu.a = 0;
         break;
-      case 9: // SELDSK
-        cpu.h = 0; cpu.l = 0; cpu.a = 0;
+      case 9: { // SELDSK
+        const index = cpu.e;
+        const disk = this.drives[index];
+        if (!disk?.image) {
+          cpu.h = 0; cpu.l = 0; cpu.a = 0;
+          break;
+        }
+        this.biosDisk = index;
+        const dph = this.buildDph(disk);
+        cpu.h = (dph >> 8) & 0xff;
+        cpu.l = dph & 0xff;
+        cpu.a = 0;
         break;
+      }
       case 10: // SETTRK
-      case 11: // SETSEC
-      case 12: // SETDMA
+        this.biosTrack = cpu.bc & 0xffff;
         cpu.a = 0;
         break;
-      case 13: // READ
-      case 14: // WRITE
-        cpu.a = 1; // sector I/O is not implemented
+      case 11: // SETSEC
+        this.biosSector = cpu.bc & 0xffff;
+        cpu.a = 0;
         break;
+      case 12: // SETDMA
+        this.biosDma = cpu.bc & 0xffff;
+        cpu.a = 0;
+        break;
+      case 13: { // READ
+        const disk = this.drives[this.biosDisk];
+        const sector = disk?.image?.readSector(this.biosTrack, this.biosSector);
+        if (!sector) { cpu.a = 1; break; }
+        this.mem.set(sector, this.biosDma & 0xff80);
+        cpu.a = 0;
+        break;
+      }
+      case 14: { // WRITE
+        const disk = this.drives[this.biosDisk];
+        if (!disk?.image) { cpu.a = 1; break; }
+        const dma = this.biosDma & 0xff80;
+        const ok = disk.image.writeSector(this.biosTrack, this.biosSector, this.mem.subarray(dma, dma + 128));
+        if (!ok) { cpu.a = 1; break; }
+        disk.imageDirty = true;
+        disk.filesDirty = false;
+        cpu.a = 0;
+        break;
+      }
       case 15: // LISTST
         cpu.a = 0xff;
         break;
       case 16: // SECTRAN
-        cpu.h = cpu.b; cpu.l = cpu.c;
+        cpu.h = cpu.b;
+        cpu.l = cpu.c;
         break;
     }
     cpu.pc = this.pop16();

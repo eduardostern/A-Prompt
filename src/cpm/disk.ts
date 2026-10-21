@@ -6,6 +6,8 @@
  * is emulated; its capacity is only limited by MAX_BYTES.
  */
 
+import { DiskImage } from './image';
+
 export const MAX_BYTES = 4 * 1024 * 1024;
 const RECORD = 128;
 const EXTENT_BYTES = 16 * 1024;
@@ -83,11 +85,62 @@ function matches(file: CpmFile, name: string, ext: string): boolean {
 
 export class Disk {
   files: CpmFile[] = [];
+  /** Set when this drive is backed by a .dsk/.img image. */
+  image?: DiskImage;
+  imageDirty = false;
+  filesDirty = false;
 
   constructor(public label = 'A') {}
 
   reset(): void {
     this.files = [];
+    this.image = undefined;
+    this.imageDirty = false;
+    this.filesDirty = false;
+  }
+
+  mountImage(input: Uint8Array): boolean {
+    const image = DiskImage.fromBytes(input);
+    if (!image) return false;
+    this.image = image;
+    this.files = image.extractFiles();
+    this.imageDirty = false;
+    this.filesDirty = false;
+    return true;
+  }
+
+  ejectImage(): void {
+    this.syncImage();
+    this.image = undefined;
+    this.imageDirty = false;
+    this.filesDirty = false;
+  }
+
+  syncImage(): void {
+    if (!this.image) return;
+    if (this.filesDirty) {
+      this.image.rebuild(this.files);
+      this.imageDirty = false;
+    } else if (this.imageDirty) {
+      this.files = this.image.extractFiles();
+      this.imageDirty = false;
+    }
+    this.filesDirty = false;
+  }
+
+  markFilesDirty(): void {
+    if (this.image) this.filesDirty = true;
+  }
+
+  /** Raw image bytes, creating an 8" image from the files if needed. */
+  exportImage(): Uint8Array | null {
+    if (this.image) {
+      this.syncImage();
+      return this.image.toBytes();
+    }
+    const image = DiskImage.blank();
+    if (!image.rebuild(this.files)) return null;
+    return image.toBytes();
   }
 
   usedBytes(): number {
@@ -114,6 +167,7 @@ export class Disk {
       existing.data = new Uint8Array(0);
       existing.ro = false;
       existing.sys = false;
+      this.markFilesDirty();
       return existing;
     }
     if (this.usedBytes() > MAX_BYTES) return { error: 'full' };
@@ -126,6 +180,7 @@ export class Disk {
       sys: false,
     };
     this.files.push(f);
+    this.markFilesDirty();
     return f;
   }
 
@@ -139,11 +194,13 @@ export class Disk {
       existing.data = data;
       existing.ro = ro;
       existing.sys = sys;
+      this.markFilesDirty();
       return existing;
     }
     if (this.usedBytes() + data.length > MAX_BYTES) return null;
     const f: CpmFile = { user, name: n, ext: e, data, ro, sys };
     this.files.push(f);
+    this.markFilesDirty();
     return f;
   }
 
@@ -151,6 +208,7 @@ export class Disk {
     const i = this.files.indexOf(file);
     if (i < 0) return false;
     this.files.splice(i, 1);
+    this.markFilesDirty();
     return true;
   }
 

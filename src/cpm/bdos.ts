@@ -228,6 +228,7 @@ export class Bdos {
       f.data = grown;
     }
     f.data.set(this.mem.subarray(this.dma, this.dma + 128), off);
+    disk.markFilesDirty();
     return true;
   }
 
@@ -267,6 +268,10 @@ export class Bdos {
   async handle(): Promise<void> {
     const fn = this.cpu.c;
     const de = this.cpu.de;
+
+    // Raw BIOS writes may have changed the directory; refresh the file view.
+    const active = this.currentDisk();
+    if (active.imageDirty) active.syncImage();
 
     switch (fn) {
       case 0: // P_TERMCPM
@@ -509,6 +514,7 @@ export class Bdos {
         if (!f || disk.find(this.user, newName, newExt)) { this.result(0xff); break; }
         f.name = newName;
         f.ext = newExt;
+        disk.markFilesDirty();
         this.result(0);
         break;
       }
@@ -547,12 +553,19 @@ export class Bdos {
         if (!f) { this.result(0xff); break; }
         f.ro = n.ro;
         f.sys = n.sys;
+        disk.markFilesDirty();
         this.result(0);
         break;
       }
 
       case 31: { // DRV_DPB
         const dpb = 0xfd40;
+        const current = this.currentDisk();
+        if (current.image) {
+          this.mem.set(current.image.dpb(), dpb);
+          this.resultHL(dpb);
+          break;
+        }
         const bytes = [
           0x40, 0x00, // SPT = 64
           0x07, // BSH = 7 (16K blocks)

@@ -83,8 +83,24 @@ interface StoredFile {
   d: string;
 }
 
+interface StoredDrive {
+  v?: number;
+  files?: StoredFile[];
+  image?: string;
+}
+
 function saveDrive(index: number): void {
   const disk = drives[index];
+  if (disk.image) {
+    try {
+      disk.syncImage();
+      const bytes = disk.exportImage();
+      if (bytes) localStorage.setItem(driveKey(index), JSON.stringify({ v: 2, image: bytesToB64(bytes) }));
+    } catch {
+      /* quota exceeded: keep the image in memory */
+    }
+    return;
+  }
   const files: StoredFile[] = [];
   for (const f of disk.files) {
     if (trimName(f.name) === '$$$') continue; // transient SUBMIT queue
@@ -114,7 +130,12 @@ function restoreDrive(index: number): void {
       legacy = !!raw;
     }
     if (!raw) return;
-    const parsed = JSON.parse(raw) as { files?: StoredFile[] };
+    const parsed = JSON.parse(raw) as StoredDrive;
+    if (typeof parsed.image === 'string') {
+      const bytes = b64ToBytes(parsed.image);
+      if (bytes.length <= MAX_BYTES * 2) drives[index].mountImage(bytes);
+      return;
+    }
     if (!parsed.files) return;
     for (const f of parsed.files) {
       if (typeof f.n !== 'string' || typeof f.d !== 'string') continue;
@@ -133,6 +154,11 @@ function restoreDrive(index: number): void {
 const fileList = el<HTMLUListElement>('file-list');
 const driveTabs = el<HTMLDivElement>('drive-tabs');
 const driveTitle = el('drive-title');
+const imageBadge = el('image-badge');
+const imageInput = el<HTMLInputElement>('image-input');
+const mountImageBtn = el<HTMLButtonElement>('mount-image-btn');
+const exportImageBtn = el<HTMLButtonElement>('export-image-btn');
+const ejectImageBtn = el<HTMLButtonElement>('eject-image-btn');
 const consoleDrive = el('console-drive');
 const terminalSelect = el<HTMLSelectElement>('terminal-type');
 const usage = el('usage');
@@ -174,6 +200,8 @@ function renderFiles(): void {
   const disk = activeDisk();
   const letter = letterFor(activeDrive);
   driveTitle.textContent = `Drive ${letter}:`;
+  imageBadge.hidden = !disk.image;
+  ejectImageBtn.disabled = !disk.image;
   fileList.setAttribute('aria-label', `Files on drive ${letter}`);
   consoleDrive.textContent = `Console · ${letterFor(machine.bdos.drive)}:`;
 
@@ -277,20 +305,8 @@ fileList.addEventListener('click', (ev) => {
   }
 });
 
-function downloadFile(file: CpmFile): void {
-  const blob = new Blob([new Uint8Array(file.data)], { type: 'application/octet-stream' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = displayName(file);
-  document.body.append(a);
-  a.click();
-  a.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-function downloadLog(name: string, bytes: number[]): void {
-  const blob = new Blob([new Uint8Array(bytes)], { type: 'text/plain' });
+function downloadBytes(name: string, data: Uint8Array | number[]): void {
+  const blob = new Blob([new Uint8Array(data)], { type: 'application/octet-stream' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -299,6 +315,14 @@ function downloadLog(name: string, bytes: number[]): void {
   a.click();
   a.remove();
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function downloadFile(file: CpmFile): void {
+  downloadBytes(displayName(file), file.data);
+}
+
+function downloadLog(name: string, bytes: number[]): void {
+  downloadBytes(name, bytes);
 }
 
 function renderDevices(): void {
@@ -403,6 +427,45 @@ driveTabs.addEventListener('click', (ev) => {
   activeDrive = index;
   renderFiles();
   con.send(`${letterFor(index)}:\r`);
+  con.focus();
+});
+
+mountImageBtn.addEventListener('click', () => imageInput.click());
+
+imageInput.addEventListener('change', async () => {
+  const file = imageInput.files?.[0];
+  imageInput.value = '';
+  if (!file || machine.busy) return;
+  const data = new Uint8Array(await file.arrayBuffer());
+  if (!activeDisk().mountImage(data)) {
+    con.write('\r\n* Unsupported image. Use a raw 8" SSSD, 512K or 4MB .dsk/.img.\r\n');
+    return;
+  }
+  saveAllDrives();
+  renderFiles();
+  con.write(`\r\n* Mounted ${file.name} on ${letterFor(activeDrive)}:.\r\n`);
+  con.send('\r');
+  con.focus();
+});
+
+exportImageBtn.addEventListener('click', () => {
+  if (machine.busy) return;
+  const bytes = activeDisk().exportImage();
+  if (!bytes) {
+    con.write('\r\n* Not enough space for an 8" image.\r\n');
+    return;
+  }
+  downloadBytes(`${letterFor(activeDrive)}.dsk`, bytes);
+  saveAllDrives();
+});
+
+ejectImageBtn.addEventListener('click', () => {
+  if (machine.busy) return;
+  activeDisk().ejectImage();
+  saveAllDrives();
+  renderFiles();
+  con.write(`\r\n* Ejected image from ${letterFor(activeDrive)}:.\r\n`);
+  con.send('\r');
   con.focus();
 });
 

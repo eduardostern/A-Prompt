@@ -43,6 +43,10 @@ There is no backend and no WebAssembly: `dist/` is a plain static site.
   **`XSUB`** feeds the remaining lines to programs that read the console.
 - **Terminal profiles**: ANSI/VT100, ADM-3A and VT52 escape-sequence
   translation, with CP437 character mapping.
+- **Disk images**: mount/export raw 8" SSSD (77×26), 512K and 4MB
+  `.dsk`/`.img` images. BIOS sector I/O (`SELDSK`, `SETTRK`, `SETSEC`,
+  `SETDMA`, `READ`, `WRITE`, `SECTRAN`) and a CP/M 2.2 filesystem are
+  implemented, so tools like FORMAT and DSKMAINT can work on mounted images.
 - **Clock and devices**: virtual clock via CP/M 3-style `T_GET`/`T_SET`
   (BDOS 104/105) and `DATE`; printer/serial bytes captured to downloadable
   logs (BDOS 4/5 and BIOS LIST/PUNCH).
@@ -122,10 +126,21 @@ npx wrangler pages deploy dist
 In both cases, uploads and files created inside CP/M are stored in the
 visitor's browser (`localStorage`), so every visitor has their own drive A:.
 
+## Disk images
+
+Drives A:–D: are host-folder drives by default. Use **Export .dsk** to turn
+one into a raw 8" image, then **Mount .dsk** on any drive to work with raw
+sectors. The image panel supports 8" SSSD (77 tracks × 26 sectors), 512K and
+4MB images; the CP/M filesystem is decoded and rebuilt automatically.
+
+With an image mounted, `FORMAT`, `DSKMAINT` and other BIOS-level tools can
+read and write sectors. **Eject** converts the image back into the in-memory
+file list (use **Export .dsk** to keep it).
+
 ## Limitations
 
-- No raw sector I/O yet (BIOS READ/WRITE). Software that talks to physical
-  disks (FORMAT, DSKMAINT) will not work.
+- Drive A: is a host-folder drive by default. Raw-sector tools (FORMAT,
+  DSKMAINT) need a mounted image; export A: as `.dsk` and mount it first.
 - CP/M 2.2 only (not CP/M 3). The clock is available through CP/M 3-style
   `T_GET`/`T_SET` calls; serial is output-only (captured to a log).
 - Terminal profiles cover ANSI/VT100, ADM-3A and VT52; software that requires
@@ -137,6 +152,7 @@ visitor's browser (`localStorage`), so every visitor has their own drive A:.
 | --- | --- |
 | `src/z80.ts` | Z80 interpreter: flags, prefixes, approximate cycles |
 | `src/cpm/disk.ts` | In-memory drive, 8.3 names, wildcards, user areas |
+| `src/cpm/image.ts` | Raw `.dsk` images, CP/M 2.2 directory and block allocation |
 | `src/cpm/bdos.ts` | BDOS calls (`CALL 5`) and CP/M directory |
 | `src/cpm/ccp.ts` | Shell, FCB parsing, `SUBMIT` |
 | `src/cpm/machine.ts` | Memory map, BDOS/BIOS traps, execution loop |
