@@ -84,17 +84,80 @@ Direct downloads:
 [Adventure + many games](http://www.retroarchive.org/cpm/games/manygame.zip)
 
 Most CP/M `.COM` games work if you upload the program and any data files with
-their exact 8.3 names. Tested from that archive:
+their exact 8.3 names. The **Install game .zip** button accepts a downloaded
+zip, installs its files on the selected drive, and runs the game when the
+main `.COM` is unambiguous. You can also drop a zip on the drive panel.
 
-- **Sargon 2.1** (`SARGON.COM`) — plays normally; the zip installer runs it
-  automatically.
-- **Nemesis** (`NEMESIS.COM` + data files) — installs and starts; it needs a
-  `TERM.DEF`, so run `TERMDEF` first, then `NEMESIS <character>` (characters
-  are created with `PERSON.COM`).
-- **Zork I** (`ZORK1.COM` + `ZORK1.DAT`) — intro, movement and parser work.
-- **Adventure** (`ADVENTUR.COM` + the `.DAT` files) — needs the message file
-  unsqueezed first: run `USQ ADVENTUR.MQG`, accept `ADVENTUR.MSG`, then start
-  the game.
+### Sargon 2.1
+
+1. Click **Sargon ↓** and save `sargon.zip`.
+2. Keep drive **A:** selected and click **Install game .zip**; choose the zip.
+3. It installs `SARGON.COM` and starts it automatically.
+4. Answer the prompts: error bell `N`, `G` for a new game, printer `N`,
+   color `W`, level `1`, display board `Y`.
+
+### Nemesis
+
+1. Click **Nemesis ↓** (the zip includes a scanned manual and is ~6 MB).
+2. **Install game .zip** → `nemesis.zip`. It installs 36 files and starts
+   `NEMESIS`.
+3. Nemesis needs `TERM.DEF`. Run `TERMDEF` once:
+
+   ```text
+   A>TERMDEF
+   ```
+
+   - Answer `N` to “exit and change disks?”
+   - Choose `2` (define terminal), then `9` (DEC VT-52/VT-100)
+   - Use `6` to test, `7` to install, `8` to exit
+   - Select **ANSI / VT100** (or VT52) in the A-Prompt toolbar to match
+4. Create a character with `PERSON` (follow its prompts).
+5. Start the game:
+
+   ```text
+   A>NEMESIS ALICE
+   ```
+
+### Zork I–III
+
+The Zork archive uses the old **Implode** compression, which the in-app
+installer cannot decode (it shows a “legacy Implode” message).
+
+1. Click **Zork I–III ↓** and download `zork123_80.zip`.
+2. Extract it with your OS (double-click on macOS, “Extract All” on Windows,
+   `unzip` on Linux).
+3. Drag `ZORK1.COM` and `ZORK1.DAT` onto the Drive A: panel. For the sequels,
+   also add `ZORK2.COM`/`ZORK2.DAT` and `ZORK3.COM`/`ZORK3.DAT`.
+4. Start it:
+
+   ```text
+   A>ZORK1
+   ```
+
+   (Use `ZORK2` / `ZORK3` for the others.)
+
+### Adventure (manygame.zip)
+
+`manygame.zip` contains several games. Installing the whole zip works, but it
+is cleaner to upload only the Adventure files.
+
+1. Click **Adventure + more ↓** and extract `manygame.zip`.
+2. Upload these files from `ADVENT~2/` to drive A:
+   `ADVENTUR.COM`, `ATAB.DAT`, `COMMON.DAT`, `KTAB.DAT`, `LTEXT.DAT`,
+   `RTEXT.DAT`, `STEXT.DAT`, `TRAVEL.DAT`, `USQ.COM`, `ADVENTUR.MQG`.
+3. If `COMMON.DAT` already exists as 0 bytes, delete it first.
+4. Decode the squeezed message file:
+
+   ```text
+   A>USQ ADVENTUR.MQG
+   ```
+
+   Press Enter to accept `ADVENTUR.MSG`.
+5. Run it and enter any three digits when asked:
+
+   ```text
+   A>ADVENTUR
+   ```
 
 Select ADM-3A or VT52 in the console toolbar if a game assumes one of those
 terminals.

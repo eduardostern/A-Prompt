@@ -528,6 +528,17 @@ body::after {
   color: var(--muted);
 }
 
+.game-guide {
+  display: inline-block;
+  margin-top: 7px;
+  color: var(--green);
+  font-size: 10px;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(94, 224, 143, 0.25);
+}
+
+.game-guide:hover { border-color: var(--green); }
+
 /* ---- footer ---------------------------------------------------------- */
 
 .footer {
