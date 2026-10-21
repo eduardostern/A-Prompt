@@ -248,6 +248,20 @@ original files from RetroArchive and install them with **Install .zip** (or
 2. **Install .zip** → `tpas30.zip`.
 3. Run `TINST` once to set your terminal, then `TURBO`.
 
+Tested: it boots into the Turbo Pascal 3.00A IDE (default “Kaypro with
+hi-lite” terminal); use `TINST` to switch to ANSI.
+
+### dBASE II 2.43
+
+1. Download [dbaseii.zip](http://www.retroarchive.org/cpm/dbase/dbaseii.zip).
+2. **Install .zip** → `dbaseii.zip` (installs `DBASE.COM`, `DBASEOVR.COM`
+   and `DBASEMSG.TXT`).
+3. Run `DBASE`.
+
+**Status: experimental.** Both the Kaypro 2.43 build and the generic 2.4 build
+install and start, and `INSTALL` saves the terminal configuration, but the
+runtime currently stalls in a blank overlay loop. Not fixed yet.
+
 ### SuperCalc 1.x / 2
 
 1. Download [Suprcalc.zip](http://www.retroarchive.org/cpm/business/Suprcalc.zip)
@@ -255,6 +269,10 @@ original files from RetroArchive and install them with **Install .zip** (or
 2. **Install .zip**.
 3. Run `INSTALL` → `M` (ANSI Standard) → confirm → `A` save → `X` quit.
 4. Start with `SC` (or `SC2`).
+
+`INSTALL` works and saves the ANSI configuration; `SC` 1.x still did not draw
+the spreadsheet in testing. Try `SC2`, and select the matching terminal
+profile.
 
 All of these are still copyrighted; the links point to the original archive.
 The emulator only installs files you download.
