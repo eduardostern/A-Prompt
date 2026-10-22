@@ -3,7 +3,8 @@
 CP/M 2.2 emulator for the browser in TypeScript: Z80 core, host-side BDOS,
 BIOS and CCP, xterm.js terminal. Static site, no backend. The live demo
 runs on Cloudflare Workers (`wrangler.toml`). Built by DeepSeek V4.1 Flash via
-OpenCode, then reviewed and fixed with Claude Code — keep the README and the
+OpenCode, reviewed and fixed with Claude Code (Opus 5.5), final touches by
+Claude Fable 5.1 — keep the README and the
 About card's provenance text accurate if that story changes.
 
 ## Commands

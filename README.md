@@ -20,8 +20,10 @@ the original Digital Research binaries distributed at
 > Then [Claude Code](https://claude.com/claude-code) with Claude Opus 5.5 had to
 > review it and fix what DeepSeek left behind: CP/M 2.2 compatibility bugs, the
 > memory map, standard disk-image formats (including z80pack's), SUBMIT, the
-> clock and STAT. DeepSeek built it, Claude reviewed and fixed it. No GPT or
-> Grok was consulted. Yes, both are transformers — the only *other* transformer
+> clock and STAT. Final touches by **Claude Fable 5.1**, where the cheap
+> tokens were not up to the task: BIOS DMA alignment, S2 in FCB record
+> numbers, F_OPEN's extent, and ^S/^C on console output. DeepSeek built it,
+> Claude reviewed and fixed it. No GPT or Grok was consulted. Yes, both are transformers — the only *other* transformer
 > involved is the one in the power supply.
 
 **Live demo:** <https://a-prompt.stern.workers.dev>
@@ -441,6 +443,14 @@ An effective Sino-American team:
      hard disks, and no data loss when an image fills up.
    - SUBMIT across drives and user areas, STAT free space, the drive prompt
      after a disk reset, and a real Z80 clock limit with Zilog T-states.
+3. **Final touches — Claude Fable 5.1.** A second audit with the same tool
+   and a stronger model, where the cheap tokens were not up to the task:
+   BIOS READ/WRITE wrote to a 128-byte-aligned address instead of the DMA
+   address, FCB record numbers ignored S2 (EX overflowed past 31 on files
+   over 512K), F_OPEN discarded the requested extent and CR, BDOS 13 did not
+   reset DMA, console output ignored ^S/^C, BDOS 10 read past a full buffer,
+   and Z80 R/interrupt details. Each fix has a regression test that fails
+   on the earlier code; `zexdoc` and `zexall` still pass.
 
 No GPT, Grok, or other OpenAI/xAI model was involved. Both DeepSeek and Claude
 are transformers, of course; the only *other* transformer here is the one in
