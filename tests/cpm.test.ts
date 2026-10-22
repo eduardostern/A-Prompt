@@ -22,6 +22,7 @@ class TestConsole implements ConsoleIO {
     else if (code === 10) this.output += '\n';
     else if (code === 8) this.output += '\b';
     else if (code === 9) this.output += '\t';
+    else if (code === 27) this.output += '\x1b';
     else if (code >= 32 && code < 127) this.output += String.fromCharCode(code);
     else if (code >= 128) this.output += '.';
   }
@@ -578,5 +579,42 @@ describe('CP/M 2.2 compatibility', () => {
     expect(second.machine.mem[0x2001]).toBe(3);
     expect([...second.machine.mem.subarray(0x2002, 0x2005)]).toEqual([0x41, 0x09, 0x42]);
     expect(second.con.output).toContain('A       B');
+  });
+
+  it('COLOR prints the palette as SGR sequences', async () => {
+    const { machine, con } = boot();
+    await machine.ccp.execute('COLOR');
+    expect(con.output).toContain('\x1b[31m');
+    expect(con.output).toContain('\x1b[107m');
+    expect(con.output).toContain('\x1b[48;5;16m');
+    expect(con.output).toContain('\x1b[48;2;0;255;120m');
+    expect(con.output).toContain('\x1b[0m');
+  });
+
+  it('TETRIS plays: pieces lock, full rows clear, Q quits', async () => {
+    const { machine, con } = boot();
+    const tetris = machine.disk.find(0, 'TETRIS  ', 'COM')!;
+    // SEED (DW 4D2BH) is the last initialised byte pair; BOARD follows it.
+    let seedAt = tetris.data.length - 2;
+    while (seedAt > 0 && !(tetris.data[seedAt] === 0x2b && tetris.data[seedAt + 1] === 0x4d)) seedAt--;
+    expect(seedAt).toBeGreaterThan(0);
+    const board = 0x100 + seedAt + 2;
+    // Deliver keys by poll count: start, fill the bottom four rows while the
+    // first piece falls, hard drop, then quit.
+    let polls = 0;
+    con.pollByte = () => {
+      polls++;
+      if (polls === 5) return 0x20;
+      if (polls === 9) machine.mem.fill(1, board + 160, board + 200);
+      if (polls === 12) return 0x20;
+      if (polls === 100) return 0x71;
+      return undefined;
+    };
+    await machine.runCom(tetris, 'TETRIS');
+    expect(con.output).toContain('T E T R I S');
+    expect(con.output).toContain('\x1b[5;59H00004'); // Lines field after the tetris
+    expect(con.output).toContain('Thanks for playing.');
+    expect(machine.mem.subarray(board + 160, board + 200).every((v) => v === 0)).toBe(false); // piece shifted down
+    expect(machine.mem.subarray(board, board + 160).every((v) => v === 0)).toBe(true);
   });
 });

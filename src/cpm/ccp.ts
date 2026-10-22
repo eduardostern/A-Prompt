@@ -255,6 +255,7 @@ export class Ccp {
       '  SUBMIT batch files          Try: SUBMIT DEMO',
       '  XSUB console input from SUBMIT files (XSUB / XSUB OFF)',
       '  HELLO demo                  Try: TYPE HELLO.ASM',
+      '  COLOR ANSI palette test     TETRIS  colour Tetris (ANSI)',
       '',
       'KEYS',
       '  Ctrl+C cancel line   Ctrl+H erase   Ctrl+U clear line',

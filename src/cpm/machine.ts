@@ -84,7 +84,7 @@ export class CpmMachine {
       c.write('   A-PROMPT · CP/M 2.2 · Z80\r\n');
       c.write('  ==========================\r\n');
       c.write('\r\n  Type HELP for commands.\r\n');
-      c.write('  Try: DIR, HELLO, STAT, PIP.\r\n\r\n');
+      c.write('  Try: DIR, HELLO, TETRIS, STAT.\r\n\r\n');
       return;
     }
     const line = '─'.repeat(44);
@@ -92,7 +92,7 @@ export class CpmMachine {
     c.write('  │  A-PROMPT  ·  CP/M 2.2  ·  Z80  ·  64K RAM │\r\n');
     c.write(`  └${line}┘\r\n`);
     c.write('\r\n  CP/M 2.2 in your browser. Type HELP for commands.\r\n');
-    c.write('  Sample programs: PIP, STAT, DDT, ED, ASM, HELLO.\r\n\r\n');
+    c.write('  Sample programs: PIP, STAT, DDT, ED, ASM, HELLO, TETRIS.\r\n\r\n');
   }
 
   async start(): Promise<void> {

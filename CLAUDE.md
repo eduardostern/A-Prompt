@@ -15,6 +15,8 @@ npm test                         # vitest (zex tests skipped)
 npx tsc --noEmit                 # typecheck (npm run build also runs it)
 npm run build                    # static site in dist/
 ZEX=1 npx vitest run tests/zex.test.ts   # zexdoc + zexall, ~2.5 min
+npx vite-node scripts/assemble.ts COLOR TETRIS && npm run embed
+                                 # rebuild the sample .COMs from programs/*.ASM
 ```
 
 Run `npx tsc --noEmit` and `npm test` before every commit. Rerun the zex
@@ -93,6 +95,14 @@ user/drive; the CCP restores both from it after each program.
 - Real test disks: z80pack's `cpmsim/disks/library` (`cpm22-1.dsk`,
   `hd-tools.dsk`, …) via raw.githubusercontent.com — download to the
   scratchpad, never into the repo.
+
+## Sample programs
+
+- `programs/*.ASM` are 8080 sources for DRI ASM 2.0: no Z80 mnemonics, and
+  `TITLE`/`PAGE` are pseudo-ops, not usable as labels. `;` inside a string
+  is safest as a `3BH` byte. `scripts/assemble.ts` runs ASM and LOAD inside
+  the emulator; a line starting with an error letter means a failed assembly.
+- TETRIS times its ticks with a busy loop tuned for the 4 MHz default clock.
 
 ## Testing tips
 
