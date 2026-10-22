@@ -44,6 +44,10 @@ class TestConsole implements ConsoleIO {
     return this.queue.length > 0;
   }
 
+  peekByte(): number | undefined {
+    return this.queue[0];
+  }
+
   feed(text: string): void {
     for (const ch of text) this.queue.push(ch.charCodeAt(0));
   }
@@ -532,5 +536,47 @@ describe('CP/M 2.2 compatibility', () => {
     expect(machine.mem[0x2001]).toBe(128); // extent 1 is full: 40K spans extents 0-2
     expect(machine.mem[0x2002]).toBe(0x77);
     expect(machine.mem[0x2003]).toBe(0xff);
+  });
+  it('BDOS 13 resets the DMA address to 0080h', async () => {
+    const { machine } = boot();
+    await run(machine, [...bdos(26, 0x1000), ...bdos(13, 0), 0xc9]);
+    expect(machine.bdos.dma).toBe(0x80);
+  });
+
+  it('^S pauses console output and ^C during the pause warm boots', async () => {
+    const { machine, con } = boot();
+    machine.mem.set([...'ABCDEFGH'].map((c) => c.charCodeAt(0)), 0x2000);
+    machine.mem[0x2008] = 0x24;
+    con.queue.push(0x13, 0x51, 0x58); // ^S, Q resumes, X stays for the program
+    await run(machine, [...bdos(9, 0x2000), ...bdos(1, 0), 0x32, 0x00, 0x30, 0xc9]);
+    expect(con.output).toContain('ABCDEFGH');
+    expect(machine.mem[0x3000]).toBe(0x58);
+
+    const second = boot();
+    second.machine.mem.set([...'ABCDEFGH'].map((c) => c.charCodeAt(0)), 0x2000);
+    second.machine.mem[0x2008] = 0x24;
+    second.con.queue.push(0x13, 0x03);
+    second.machine.mem[0x3000] = 0;
+    await run(second.machine, [...bdos(9, 0x2000), 0x3e, 0x01, 0x32, 0x00, 0x30, 0xc9]);
+    expect(second.con.output).not.toContain('ABCDEFGH');
+    expect(second.machine.mem[0x3000]).toBe(0); // the program never ran on
+  });
+
+  it('BDOS 10 returns when the buffer is full and accepts LF and TAB', async () => {
+    const { machine, con } = boot();
+    con.feed('ABCDE\r');
+    machine.mem[0x2000] = 3;
+    await run(machine, [...bdos(10, 0x2000), 0xc9]);
+    expect(machine.mem[0x2001]).toBe(3);
+    expect(String.fromCharCode(...machine.mem.subarray(0x2002, 0x2005))).toBe('ABC');
+    expect(con.queue.map((c) => String.fromCharCode(c)).join('')).toBe('DE\r');
+
+    const second = boot();
+    second.con.queue.push(0x41, 0x09, 0x42, 0x0a);
+    second.machine.mem[0x2000] = 10;
+    await run(second.machine, [...bdos(10, 0x2000), 0xc9]);
+    expect(second.machine.mem[0x2001]).toBe(3);
+    expect([...second.machine.mem.subarray(0x2002, 0x2005)]).toEqual([0x41, 0x09, 0x42]);
+    expect(second.con.output).toContain('A       B');
   });
 });

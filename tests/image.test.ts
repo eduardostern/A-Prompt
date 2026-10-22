@@ -19,6 +19,10 @@ class TestConsole implements ConsoleIO {
   async readByte(): Promise<number> { return this.queue.shift() ?? 0x1a; }
   pollByte(): number | undefined { return this.queue.shift(); }
   hasInput(): boolean { return this.queue.length > 0; }
+
+  peekByte(): number | undefined {
+    return this.queue[0];
+  }
 }
 
 function file(name: string, ext: string, bytes: number[]) {

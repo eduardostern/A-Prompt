@@ -9,6 +9,8 @@ export interface ConsoleIO {
   pollByte(): number | undefined;
   /** True when a byte is waiting. Does not consume it. */
   hasInput(): boolean;
+  /** The next pending byte without consuming it, if any. */
+  peekByte(): number | undefined;
   /** Last byte written, used to avoid double line breaks. */
   lastByte: number;
   /** Terminal width in columns (CP/M assumes 80). */

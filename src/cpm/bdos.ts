@@ -181,6 +181,19 @@ export class Bdos {
     return this.con.readByte();
   }
 
+  /**
+   * Console output as BDOS 2 does it: a pending ^S pauses until the next key,
+   * and ^C typed during the pause warm boots. Other keys stay queued for the
+   * program. BIOS CONOUT is raw and does not go through here.
+   */
+  private async conout(ch: number): Promise<void> {
+    if (this.con.peekByte() === 0x13) {
+      this.con.pollByte();
+      if ((await this.con.readByte()) === 0x03) throw new WarmBoot();
+    }
+    this.con.writeByte(ch);
+  }
+
   // ---- helpers ----------------------------------------------------------
 
   private get mem(): Uint8Array { return this.cpu.mem; }
@@ -416,13 +429,13 @@ export class Bdos {
 
       case 1: { // C_READ
         const ch = await this.readChar();
-        this.con.writeByte(ch);
+        await this.conout(ch);
         this.result(ch);
         break;
       }
 
       case 2: // C_WRITE
-        this.con.writeByte(this.cpu.e);
+        await this.conout(this.cpu.e);
         break;
 
       case 3: // A_READ
@@ -449,7 +462,7 @@ export class Bdos {
         } else if (e === 0xfe) {
           this.result(this.hasConsoleInput() ? 0xff : 0);
         } else {
-          this.con.writeByte(e);
+          await this.conout(e);
         }
         break;
       }
@@ -468,7 +481,7 @@ export class Bdos {
         for (let n = 0; n < 65536; n++) {
           const c = this.mem[a];
           if (c === 0x24) break;
-          this.con.writeByte(c);
+          await this.conout(c);
           a = (a + 1) & 0xffff;
         }
         break;
@@ -477,43 +490,50 @@ export class Bdos {
       case 10: { // C_READSTR
         const max = this.mem[de];
         let count = 0;
+        let column = 0; // characters echoed on this line, for TAB stops
         this.cpu.a = 0;
-        for (;;) {
+        const erase = (ch: number) => {
+          const width = ch === 9 ? 8 - ((column - 1) & 7) : ch < 32 ? 2 : 1;
+          for (let i = 0; i < width; i++) this.con.write('\b \b');
+          column -= width;
+        };
+        // CP/M 2.2 returns when the buffer is full as well as on CR or LF.
+        while (count < max) {
           const ch = await this.readChar();
-          if (ch === 13) {
-            this.con.writeByte(13);
-            this.con.writeByte(10);
-            break;
-          }
-          if (ch === 10) continue;
-          if (ch === 3) {
-            this.con.write('\r\n^C\r\n');
+          if (ch === 13 || ch === 10) break;
+          if (ch === 3 && count === 0) { // ^C at the start of the line reboots
+            this.con.write('^C\r\n');
             throw new WarmBoot();
           }
           if (ch === 8 || ch === 127) {
-            if (count > 0) {
-              count--;
-              this.con.write('\b \b');
-            }
+            if (count > 0) erase(this.mem[(de + 2 + --count) & 0xffff]);
             continue;
           }
           if (ch === 21 || ch === 24) { // ^U / ^X
-            while (count > 0) {
-              count--;
-              this.con.write('\b \b');
-            }
+            while (count > 0) erase(this.mem[(de + 2 + --count) & 0xffff]);
             continue;
           }
-          if (ch === 5) { this.con.write('\r\n'); continue; }
-          if (ch === 18) { this.con.write('\r\n'); continue; }
-          if (ch === 19) continue; // ^S
-          if (ch >= 32 && ch < 127) {
-            if (count < max) {
-              this.mem[(de + 2 + count) & 0xffff] = ch;
-              count++;
-              this.con.writeByte(ch);
-            }
+          if (ch === 5) { this.con.write('\r\n'); column = 0; continue; }
+          if (ch === 18) { this.con.write('\r\n'); column = 0; continue; }
+          if (ch === 19 || ch === 16) continue; // ^S, ^P
+          if (ch === 9) {
+            this.mem[(de + 2 + count++) & 0xffff] = 9;
+            do { this.con.writeByte(0x20); column++; } while (column & 7);
+            continue;
           }
+          this.mem[(de + 2 + count++) & 0xffff] = ch;
+          if (ch < 32) {
+            this.con.writeByte(0x5e);
+            this.con.writeByte(ch + 0x40);
+            column += 2;
+          } else {
+            this.con.writeByte(ch);
+            column++;
+          }
+        }
+        if (count < max) {
+          this.con.writeByte(13);
+          this.con.writeByte(10);
         }
         this.mem[(de + 1) & 0xffff] = count;
         this.result(0);
@@ -533,6 +553,7 @@ export class Bdos {
 
       case 13: { // DRV_ALLRESET
         this.drive = 0;
+        this.dma = 0x0080;
         this.open.clear();
         this.result(0);
         break;

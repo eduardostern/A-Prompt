@@ -158,6 +158,10 @@ export class XtermConsole implements ConsoleIO {
     return this.queue.length > 0;
   }
 
+  peekByte(): number | undefined {
+    return this.queue[0];
+  }
+
   clear(): void {
     this.term.clear();
   }
