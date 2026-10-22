@@ -27,3 +27,12 @@ export const DIRBUF_ADDR = 0xff00;
 
 /** Largest .COM that fits in the TPA. */
 export const MAX_COM_BYTES = BDOS_BASE - 0x0100;
+
+/**
+ * I/O ports of the telnet modem (see modem.ts). Every other port reads FFh.
+ *   IN  04h: status, bit 0 byte ready, bit 1 can send, bit 7 carrier
+ *   OUT 04h: control, bit 0 DTR (0 hangs up)
+ *   IN/OUT 05h: data
+ */
+export const MODEM_STATUS_PORT = 0x04;
+export const MODEM_DATA_PORT = 0x05;

@@ -654,3 +654,79 @@ describe('CP/M 2.2 compatibility', () => {
     expect(fast).toBeGreaterThan(right * 1.4);
   });
 });
+
+describe('telnet modem', () => {
+  async function run(machine: CpmMachine, code: number[]): Promise<void> {
+    const f = machine.disk.put('PROBE', 'COM', new Uint8Array(code));
+    await machine.runCom(f!, 'PROBE');
+  }
+
+  /** A line that answers at once and sends `greeting`. */
+  function fakeLine(machine: CpmMachine, greeting: number[], afterGreeting?: () => void) {
+    const line = { sent: [] as number[], closed: false, calls: [] as string[] };
+    machine.modem.dialer = (host, port, h) => {
+      line.calls.push(`${host}:${port}`);
+      queueMicrotask(() => {
+        h.onOpen();
+        h.onData(Uint8Array.from(greeting));
+        afterGreeting?.();
+      });
+      return { send: (b) => line.sent.push(...b), close: () => { line.closed = true; } };
+    };
+    return line;
+  }
+
+  it('is a UART on ports 04h/05h; other ports read FFh', async () => {
+    const { machine } = boot();
+    await run(machine, [
+      0x3e, 0x41, 0xd3, 0x05, 0x3e, 0x54, 0xd3, 0x05, 0x3e, 0x0d, 0xd3, 0x05, // "AT\r"
+      0x21, 0x00, 0x02, // LXI H,0200h
+      0xdb, 0x04, 0xe6, 0x01, 0xca, 0x1d, 0x01, // IN 04h / ANI 1 / JZ done
+      0xdb, 0x05, 0x77, 0x23, 0xc3, 0x0f, 0x01, // IN 05h / MOV M,A / INX H / JMP
+      0xdb, 0x07, 0x32, 0x00, 0x03, 0xc9, // done: IN 07h / STA 0300h / RET
+    ]);
+    const got = String.fromCharCode(...machine.mem.slice(0x200, 0x20a));
+    expect(got).toBe('AT\r\n\r\nOK\r\n');
+    expect(machine.mem[0x300]).toBe(0xff);
+  });
+
+  it('PUNCH and READER (BDOS 4 and 3) go through the modem', async () => {
+    const { machine } = boot();
+    const CALL5 = [0xcd, 0x05, 0x00];
+    const punch = (c: number) => [0x0e, 0x04, 0x1e, c, ...CALL5];
+    await run(machine, [
+      ...punch(0x41), ...punch(0x54), ...punch(0x0d),
+      0x0e, 0x03, ...CALL5, 0x32, 0x00, 0x02, // A_READ -> 0200h
+      0x0e, 0x03, ...CALL5, 0x32, 0x01, 0x02, // A_READ -> 0201h
+      0xc9,
+    ]);
+    expect(machine.mem[0x200]).toBe(0x41); // the modem echoed "AT"
+    expect(machine.mem[0x201]).toBe(0x54);
+    expect(machine.bdos.serialLog).toEqual([0x41, 0x54, 0x0d]);
+  });
+
+  it('READER returns ^Z with no carrier and nothing waiting', async () => {
+    const { machine } = boot();
+    await run(machine, [0x0e, 0x03, 0xcd, 0x05, 0x00, 0x32, 0x00, 0x02, 0xc9]);
+    expect(machine.mem[0x200]).toBe(0x1a);
+  });
+
+  it('TERM.COM dials, shows the BBS, answers telnet and hangs up on ^]', async () => {
+    const { machine, con } = boot();
+    const line = fakeLine(
+      machine,
+      [...'Welcome!\r\n'].map((c) => c.charCodeAt(0)).concat([255, 253, 24, 0xfe]),
+      () => con.feed('\x1d'),
+    );
+    con.feed('ATDT1\r');
+    await machine.runCom(machine.disk.find(0, 'TERM    ', 'COM')!, 'TERM');
+    expect(line.calls).toEqual(['vert.synchro.net:23']);
+    expect(con.output).toContain('ATDT1');
+    expect(con.output).toContain('CONNECT');
+    expect(con.output).toContain('Welcome!');
+    expect(con.output).toContain('TERM done.');
+    expect(line.sent).toEqual([255, 251, 24]); // WILL TERMINAL-TYPE
+    expect(line.closed).toBe(true);
+    expect(machine.modem.online).toBe(false);
+  });
+});

@@ -3,10 +3,11 @@ import { Disk, CpmFile } from './disk';
 import { Bdos } from './bdos';
 import { Ccp } from './ccp';
 import { ConsoleIO, WarmBoot } from '../console';
+import { Modem } from './modem';
 
 import {
   BDOS_ENTRY, BIOS_BASE, BIOS_ENTRIES, CCP_STACK,
-  DIRBUF_ADDR, DPB_ADDR, DPH_ADDR, TRAP_BASE,
+  DIRBUF_ADDR, DPB_ADDR, DPH_ADDR, MODEM_DATA_PORT, MODEM_STATUS_PORT, TRAP_BASE,
 } from './layout';
 
 export { BDOS_ENTRY };
@@ -25,6 +26,8 @@ export class CpmMachine {
   readonly bdos: Bdos;
   readonly ccp: Ccp;
   readonly mem: Uint8Array;
+  /** Telnet modem on ports 04h/05h, also the READER/PUNCH device. */
+  readonly modem = new Modem();
 
   /** Drive A:, kept for callers that only care about the boot disk. */
   get disk(): Disk {
@@ -55,6 +58,20 @@ export class CpmMachine {
     this.mem = this.cpu.mem;
     this.initMemory();
     this.bdos = new Bdos(this.cpu, this.drives, console, () => { this.warm = true; }, () => this.now());
+    this.bdos.aux = this.modem;
+    this.cpu.portIn = (port) => {
+      switch (port & 0xff) {
+        case MODEM_STATUS_PORT: return this.modem.status();
+        case MODEM_DATA_PORT: return this.modem.read();
+        default: return 0xff;
+      }
+    };
+    this.cpu.portOut = (port, value) => {
+      switch (port & 0xff) {
+        case MODEM_STATUS_PORT: this.modem.control(value); break;
+        case MODEM_DATA_PORT: this.modem.write(value); break;
+      }
+    };
     this.ccp = new Ccp(this);
   }
 
@@ -94,7 +111,7 @@ export class CpmMachine {
     c.write('  │  A-PROMPT  ·  CP/M 2.2  ·  Z80  ·  64K RAM │\r\n');
     c.write(`  └${line}┘\r\n`);
     c.write('\r\n  CP/M 2.2 in your browser. Type HELP for commands.\r\n');
-    c.write('  Sample programs: PIP, STAT, DDT, ED, ASM, HELLO, TETRIS.\r\n\r\n');
+    c.write('  Sample programs: PIP, STAT, DDT, ED, ASM, HELLO, TETRIS, TERM.\r\n\r\n');
   }
 
   async start(): Promise<void> {
@@ -340,11 +357,10 @@ export class CpmMachine {
         if (this.bdos.printerLog.length > 1_000_000) this.bdos.printerLog.splice(0, 500_000);
         break;
       case 6: // PUNCH
-        this.bdos.serialLog.push(cpu.c & 0xff);
-        if (this.bdos.serialLog.length > 1_000_000) this.bdos.serialLog.splice(0, 500_000);
+        this.bdos.punch(cpu.c);
         break;
       case 7: // READER
-        cpu.a = 0x1a;
+        cpu.a = await this.bdos.reader();
         break;
       case 8: // HOME
         this.biosTrack = 0;

@@ -1,10 +1,10 @@
 # A-Prompt — notes for Claude
 
 CP/M 2.2 emulator for the browser in TypeScript: Z80 core, host-side BDOS,
-BIOS and CCP, xterm.js terminal. Static site, no backend. The live demo
-runs on Cloudflare Workers (`wrangler.toml`). Built by DeepSeek V4.1 Flash via
-OpenCode, reviewed and fixed with Claude Code (Opus 5.5), final touches by
-Claude Fable 5.1 — keep the README and the
+BIOS and CCP, xterm.js terminal. Static site; the only backend is the
+Worker's telnet relay. The live demo runs on Cloudflare Workers
+(`wrangler.toml`). Built by DeepSeek V4.1 Flash via OpenCode, reviewed and fixed with Claude Code (Opus 5.5), final touches by
+Claude Fable 5.1, telnet modem by Opus 5.5 — keep the README and the
 About card's provenance text accurate if that story changes.
 
 ## Commands
@@ -13,9 +13,10 @@ About card's provenance text accurate if that story changes.
 npm run dev                      # http://localhost:5173
 npm test                         # vitest (zex tests skipped)
 npx tsc --noEmit                 # typecheck (npm run build also runs it)
+npx tsc -p worker                # typecheck the Worker
 npm run build                    # static site in dist/
 ZEX=1 npx vitest run tests/zex.test.ts   # zexdoc + zexall, ~2.5 min
-npx vite-node scripts/assemble.ts COLOR TETRIS && npm run embed
+npx vite-node scripts/assemble.ts COLOR TETRIS TERM && npm run embed
                                  # rebuild the sample .COMs from programs/*.ASM
 ```
 
@@ -47,12 +48,25 @@ exerciser after any change to `src/z80.ts`.
 | `src/cpm/image.ts` | Raw `.dsk` images: geometries, skew, extents, rebuild |
 | `src/storage.ts` | localStorage encoding (deflate + base64, v3 records) |
 | `src/main.ts` | UI wiring, persistence, uploads, toolbar |
+| `src/cpm/modem.ts` | Hayes modem on ports 04h/05h, telnet options |
+| `src/phonebook.ts` | BBSes the modem may dial (relay allowlist) |
+| `worker/index.ts` | Cloudflare Worker: `/relay` WebSocket-to-telnet |
+| `src/bell.ts` | VT100 bell, 786 Hz square wave for 250 ms |
 
 ## I/O ports
 
-No devices: every port reads FFh and OUT is a sink. The Z80 core exposes
-`portIn`/`portOut` hooks should one be needed. Programs that need real
-time use BDOS 105 (T_GET), which returns the seconds in A like CP/M 3.
+One device, the telnet modem (`src/cpm/modem.ts`): IN 04h status (bit 0
+byte ready, bit 1 can send, bit 7 carrier), OUT 04h bit 0 = DTR (0 hangs
+up), IN/OUT 05h data. It is also READER/PUNCH (BDOS 3/4). Every other port
+reads FFh and OUT is a sink. Programs that need real time use BDOS 105
+(T_GET), which returns the seconds in A like CP/M 3.
+
+The modem dials through `worker/index.ts`, a WebSocket-to-TCP relay that
+connects only to `src/phonebook.ts` entries. The relay sends one text frame,
+`CONNECT`, then raw bytes in binary frames; the modem handles telnet IAC.
+Binary frames reach the Worker as `Blob` with this compatibility date, not
+`ArrayBuffer`. Test the relay with `npm run build && npx wrangler dev`
+(port 8787); `npm run dev` proxies `/relay` there.
 
 ## Memory map
 

@@ -33,6 +33,8 @@ export class Bdos {
   readonly printerLog: number[] = [];
   /** Bytes written through BDOS 4 / BIOS PUNCH. */
   readonly serialLog: number[] = [];
+  /** The READER/PUNCH device (the modem); without one READER returns ^Z. */
+  aux?: { readBlocking(): Promise<number>; write(byte: number): void };
 
   constructor(
     private cpu: Z80,
@@ -54,6 +56,19 @@ export class Bdos {
     this.rtcStamp = null;
     this.printerLog.length = 0;
     this.serialLog.length = 0;
+  }
+
+  /** READER: waits for a byte while the modem has carrier, else ^Z. */
+  async reader(): Promise<number> {
+    return this.aux ? this.aux.readBlocking() : 0x1a;
+  }
+
+  /** PUNCH: to the modem, and logged for the Serial download. */
+  punch(byte: number): void {
+    byte &= 0xff;
+    this.serialLog.push(byte);
+    if (this.serialLog.length > 1_000_000) this.serialLog.splice(0, 500_000);
+    this.aux?.write(byte);
   }
 
   /** State the CCP resets before running each program. */
@@ -440,12 +455,11 @@ export class Bdos {
         break;
 
       case 3: // A_READ
-        this.result(0x1a);
+        this.result(await this.reader());
         break;
 
       case 4: // A_WRITE
-        this.serialLog.push(this.cpu.e & 0xff);
-        if (this.serialLog.length > 1_000_000) this.serialLog.splice(0, 500_000);
+        this.punch(this.cpu.e);
         break;
 
       case 5: // L_WRITE

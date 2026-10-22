@@ -3,6 +3,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import type { ConsoleIO } from './console';
 import { TerminalTranslator, TerminalType } from './terminal-translator';
+import { ringBell } from './bell';
 
 /** CP437 (the character set CP/M software was written for) to Unicode. */
 const CP437 =
@@ -71,6 +72,7 @@ export class XtermConsole implements ConsoleIO {
       }
     });
 
+    this.term.onBell(() => ringBell());
     this.term.onResize(() => this.onActivity?.());
     container.addEventListener('mouseup', () => this.term.focus());
   }

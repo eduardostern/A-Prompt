@@ -5,6 +5,7 @@ import { XtermConsole } from './terminal';
 import type { TerminalType } from './terminal-translator';
 import { CpmMachine } from './cpm/machine';
 import { BUILTIN_FILES } from './assets/builtin-programs';
+import type { Dialer } from './cpm/modem';
 import type { Disk } from './cpm/disk';
 import { CpmFile, MAX_BYTES, displayName, padExt, padName, trimName } from './cpm/disk';
 import {
@@ -55,6 +56,38 @@ const el = <T extends HTMLElement>(id: string): T => {
 
 const con = new XtermConsole(el('terminal'));
 const machine = new CpmMachine(con);
+
+// ---- telnet modem -----------------------------------------------------
+
+/** Dials through the Worker relay (worker/index.ts) on the same origin. */
+const relayDialer: Dialer = (host, port, handlers) => {
+  const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
+  const query = `host=${encodeURIComponent(host)}&port=${port}`;
+  let ws: WebSocket;
+  try {
+    ws = new WebSocket(`${scheme}://${location.host}/relay?${query}`);
+  } catch {
+    queueMicrotask(() => handlers.onClose());
+    return { send: () => {}, close: () => {} };
+  }
+  ws.binaryType = 'arraybuffer';
+  ws.onmessage = (e: MessageEvent) => {
+    if (typeof e.data === 'string') {
+      if (e.data === 'CONNECT') handlers.onOpen();
+    } else {
+      handlers.onData(new Uint8Array(e.data as ArrayBuffer));
+    }
+  };
+  ws.onclose = () => handlers.onClose();
+  return {
+    send: (bytes) => { if (ws.readyState === WebSocket.OPEN) ws.send(bytes); },
+    close: () => ws.close(),
+  };
+};
+
+machine.modem.dialer = relayDialer;
+machine.modem.terminalType = () => ({ ansi: 'ANSI', adm3a: 'ADM3A', vt52: 'VT52' })[con.terminalType];
+machine.modem.windowSize = () => [con.term.cols, con.term.rows];
 const drives = machine.drives;
 let activeDrive = 0;
 let lastMachineDrive = 0;

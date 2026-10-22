@@ -68,7 +68,15 @@ keeps games with timing loops playable. **Reset** stops a runaway program
   after the batch changes drive or user area; **`XSUB`** feeds the remaining
   lines to programs that read the console.
 - **Terminal profiles**: ANSI/VT100, ADM-3A and VT52 escape-sequence
-  translation, with CP437 character mapping.
+  translation, with CP437 character mapping. `^G` sounds a VT100-style bell:
+  a 786 Hz square wave for a quarter second, as from the VT100 keyboard's
+  speaker.
+- **Telnet modem**: a Hayes-style modem on I/O ports `04h`/`05h` (also the
+  READER/PUNCH device) dials telnet BBSes. `TERM.COM` is a terminal for it:
+  `ATI` lists the phone book, `ATDT 1` or `ATDT host:port` dials, `+++`
+  escapes, `ATH` hangs up and Ctrl-] quits. Browsers cannot open TCP
+  sockets, so the call goes over a WebSocket to the site's Worker, which
+  connects only to the boards in `src/phonebook.ts`.
 - **Disk images**: mount/export raw 8" SSSD (77×26, standard skew 6 as in
   cpmtools' `ibm-3740` and z80pack), 512K and 4MB `.dsk`/`.img` images, and
   z80pack's 4MB hard disks (`hd-tools.dsk` and friends).
@@ -79,8 +87,9 @@ keeps games with timing loops playable. **Reset** stops a runaway program
 - **Clock and devices**: virtual clock via CP/M 3-style `T_GET`/`T_SET`
   (`T_GET` returns the seconds in A as on CP/M 3; TETRIS re-tunes its
   timing loop against it, so it plays at the same pace at any MHz setting)
-  (BDOS 104/105) and `DATE`; printer/serial bytes captured to downloadable
-  logs (BDOS 4/5 and BIOS LIST/PUNCH).
+  (BDOS 104/105) and `DATE`; printer and punch bytes captured to
+  downloadable logs (BDOS 4/5 and BIOS LIST/PUNCH; punch output also goes
+  to the modem).
 - **Upload/download** from the drive panel; drives A:–D: (4 MB each, laid
   out like a z80pack hard disk: 2K blocks, 1024 directory entries, so `STAT`
   shows real free space) are saved compressed in the browser's
@@ -88,8 +97,8 @@ keeps games with timing loops playable. **Reset** stops a runaway program
 
 Bundled programs: **PIP**, **STAT**, **DDT**, **ED**, **ASM**, **LOAD**,
 **SUBMIT**, **DUMP**, **HELLO.COM**, **INPUT.COM**, **COLOR.COM** (shows the
-ANSI palette) and **TETRIS.COM** (a colour Tetris for the ANSI terminal, with
-its 8080 source), plus **DEMO.SUB** and **XSUB.SUB**.
+ANSI palette), **TETRIS.COM** (a colour Tetris for the ANSI terminal) and
+**TERM.COM** (a terminal for the telnet modem), with their 8080 sources, plus **DEMO.SUB** and **XSUB.SUB**.
 
 ```text
 A>DIR
@@ -103,7 +112,23 @@ A>SUBMIT XSUB
 A>DATE
 A>COLOR
 A>TETRIS
+A>TERM
 ```
+
+### Calling a BBS
+
+```text
+A>TERM
+ATI                      lists the phone book
+ATDT 3                   dials entry 3 (Black Flag)
+CONNECT
+...                      Ctrl-] hangs up and returns to A>
+```
+
+Pick the ANSI/VT100 terminal profile for ANSI art. To add a board, add it to
+`src/phonebook.ts` (the relay refuses anything else) and redeploy. During
+`npm run dev`, run `npx wrangler dev` alongside: Vite forwards `/relay` to
+it.
 
 ## Running games
 
@@ -207,8 +232,10 @@ Deflate).
 
 ## Deploy on Cloudflare
 
-A-Prompt is a static site: no server code, no environment variables, no
-database. The whole CP/M disk image is embedded in the JavaScript bundle.
+A-Prompt is a static site plus one small Worker script: no environment
+variables, no database. The whole CP/M disk image is embedded in the
+JavaScript bundle. The Worker (`worker/index.ts`) only handles `/relay`,
+the telnet relay for the modem.
 
 ### Workers (current dashboard flow)
 
@@ -218,8 +245,9 @@ database. The whole CP/M disk image is embedded in the JavaScript bundle.
 4. Node version: 22 (the repo includes `.nvmrc`).
 5. Deploy.
 
-`wrangler.toml` publishes `./dist` as **Workers Static Assets**; no Worker
-script is needed.
+`wrangler.toml` publishes `./dist` as **Workers Static Assets** and routes
+only `/relay` to the Worker script. On Pages there is no relay, so the
+modem answers `NO CARRIER`.
 
 From the CLI:
 
@@ -342,7 +370,9 @@ file list (use **Export .dsk** to keep it).
   editors, formatters) need a mounted image; export A: as `.dsk` and mount
   it first. None is bundled; bring your own.
 - CP/M 2.2 only (not CP/M 3). The clock is available through CP/M 3-style
-  `T_GET`/`T_SET` calls; serial is output-only (captured to a log).
+  `T_GET`/`T_SET` calls.
+- The modem reaches only the telnet BBSes in the phone book, through the
+  Worker; there is no XMODEM or other file-transfer program bundled.
 - Terminal profiles cover ANSI/VT100, ADM-3A and VT52; software that requires
   another terminal (Hazeltine, Televideo, Wyse, etc.) may render oddly.
 
@@ -414,7 +444,11 @@ upload it to a drive and run it.
 | `src/cpm/ccp.ts` | Shell, FCB parsing, `SUBMIT` |
 | `src/cpm/layout.ts` | Memory map addresses |
 | `src/cpm/machine.ts` | BDOS/BIOS traps, execution loop, clock limit |
+| `src/cpm/modem.ts` | Hayes-style modem, telnet options |
+| `src/phonebook.ts` | Telnet BBSes the modem and the relay allow |
 | `src/terminal.ts` | xterm.js + CP437 + keyboard |
+| `src/bell.ts` | VT100 bell (Web Audio) |
+| `worker/index.ts` | Cloudflare Worker: WebSocket-to-telnet relay |
 
 The memory map is the classic one: `0000h` jumps to the BIOS warm boot and
 `0005h` to the BDOS entry at `FC06h`. Everything the system owns (CCP stack,
@@ -471,6 +505,11 @@ An effective Sino-American team:
    staying ordinary CP/M software that also runs on real CP/M 3 and other
    emulators. The ports were removed. Measured: 128 ticks take 8.0 s at
    2 MHz, 8 MHz and Max.
+5. **Telnet modem — Claude Opus 5.5.** Asked for a serial-to-telnet
+   bridge, Opus 5.5 added a Hayes-style modem on two I/O ports, `TERM.COM`
+   in 8080 assembly, a Worker relay limited to a phone book of BBSes, and
+   the VT100 bell (786 Hz for a quarter second, from MAME and the VT100
+   Technical Manual).
 
 No GPT, Grok, or other OpenAI/xAI model was involved. Both DeepSeek and Claude
 are transformers, of course; the only *other* transformer here is the one in
@@ -489,7 +528,7 @@ A-Prompt was designed and built by Eduardo Stern. See `AUTHORS`.
 - CP/M binaries: © Digital Research, redistributed under the license granted
   by DRDOS, Inc. / Bryan Sparks, available at
   [cpm.z80.de/license.html](http://www.cpm.z80.de/license.html).
-- `HELLO`, `COLOR`, `TETRIS` (`.COM` and `.ASM`) and `DEMO.SUB` are original
+- `HELLO`, `COLOR`, `TETRIS`, `TERM` (`.COM` and `.ASM`) and `DEMO.SUB` are original
   examples for this project, assembled with the bundled ASM and LOAD.
 - xterm.js, fflate and other dependencies retain their own MIT licenses.
 - `zexdoc`/`zexall` are Frank Cringle's public-domain Z80 exercisers.
