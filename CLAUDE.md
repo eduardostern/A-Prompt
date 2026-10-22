@@ -16,7 +16,7 @@ npx tsc --noEmit                 # typecheck (npm run build also runs it)
 npx tsc -p worker                # typecheck the Worker
 npm run build                    # static site in dist/
 ZEX=1 npx vitest run tests/zex.test.ts   # zexdoc + zexall, ~2.5 min
-npx vite-node scripts/assemble.ts COLOR TETRIS TERM && npm run embed
+npx vite-node scripts/assemble.ts COLOR TETRIS TERM XMODEM ZMODEM && npm run embed
                                  # rebuild the sample .COMs from programs/*.ASM
 ```
 
@@ -61,9 +61,14 @@ up), IN/OUT 05h data. It is also READER/PUNCH (BDOS 3/4). Every other port
 reads FFh and OUT is a sink. Programs that need real time use BDOS 105
 (T_GET), which returns the seconds in A like CP/M 3.
 
-The modem dials through `worker/index.ts`, a WebSocket-to-TCP relay that
-connects only to `src/phonebook.ts` entries. The relay sends one text frame,
-`CONNECT`, then raw bytes in binary frames; the modem handles telnet IAC.
+The modem dials a board's own WebSocket gateway directly when the phone
+book lists one (`ws`, subprotocol `binary`; the stream is telnet) or for
+`ATDT wss://…`, and falls back to `worker/index.ts`, a WebSocket-to-TCP relay
+that connects only to `src/phonebook.ts` entries. The relay sends one text
+frame, `CONNECT`, then raw bytes in binary frames. The modem handles telnet
+IAC and, once it sees telnet, asks for BINARY both ways (no CR NUL) so
+XMODEM/ZMODEM data passes untouched; a peer that never sends IAC gets raw
+bytes.
 Binary frames reach the Worker as `Blob` with this compatibility date, not
 `ArrayBuffer`. Test the relay with `npm run build && npx wrangler dev`
 (port 8787); `npm run dev` proxies `/relay` there.
@@ -122,6 +127,14 @@ user/drive; the CCP restores both from it after each program.
   `TITLE`/`PAGE` are pseudo-ops, not usable as labels. `;` inside a string
   is safest as a `3BH` byte. `scripts/assemble.ts` runs ASM and LOAD inside
   the emulator; a line starting with an error letter means a failed assembly.
+- `DB` strings are at most 64 characters in DRI ASM (error `O`); write
+  lower-case hex digits and other case-sensitive bytes as numbers.
+- TERM, XMODEM and ZMODEM talk to the modem ports directly. Ctrl-] leaves
+  TERM with the call up so XMODEM/ZMODEM can run; their timeouts count
+  T_GET seconds. `tests/transfer.test.ts` runs them against lrzsz (Homebrew
+  `lsz`/`lrz`, Debian `sz`/`rz`; CI installs it, elsewhere the tests skip):
+  a telnet BINARY peer in front of the child process, with optional
+  one-byte corruption each way.
 - TETRIS paces itself with a busy loop that it re-tunes every clock second
   from the T_GET seconds to 16 ticks a second (so any MHz setting plays
   the same); without the call it keeps the 4 MHz default. Tests replace

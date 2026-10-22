@@ -3,15 +3,15 @@ import { Dialer, LinkHandlers, Modem, MODEM_CARRIER, MODEM_RX_READY } from '../s
 import { inPhoneBook, PHONE_BOOK } from '../src/phonebook';
 import { originAllowed } from '../worker/origin';
 
-const IAC = 255, DONT = 254, DO = 253, WONT = 252, WILL = 251, SB = 250, SE = 240;
+const IAC = 255, DONT = 254, DO = 253, WONT = 252, WILL = 251, SB = 250, SE = 240, NOP = 241;
 
 class FakeLine {
-  calls: { host: string; port: number }[] = [];
+  calls: { host: string; port: number; ws?: string }[] = [];
   sent: number[] = [];
   closed = false;
   handlers?: LinkHandlers;
-  dialer: Dialer = (host, port, handlers) => {
-    this.calls.push({ host, port });
+  dialer: Dialer = (target, handlers) => {
+    this.calls.push(target.ws ? { ...target } : { host: target.host, port: target.port });
     this.handlers = handlers;
     this.closed = false;
     return {
@@ -26,7 +26,10 @@ function setup() {
   let clock = 10_000;
   const modem = new Modem({
     dialer: line.dialer,
-    phoneBook: () => [{ host: 'bbs.example.com', port: 2323, name: 'Example' }],
+    phoneBook: () => [
+      { host: 'bbs.example.com', port: 2323, name: 'Example' },
+      { host: 'ws.example.net', port: 23, name: 'Direct', ws: 'wss://ws.example.net:11235/' },
+    ],
     terminalType: () => 'ANSI',
     windowSize: () => [80, 25],
     now: () => clock,
@@ -85,7 +88,9 @@ describe('telnet modem', () => {
   it('ATI lists the phone book', () => {
     const { type, drain } = setup();
     type('ATI\r');
-    expect(drain()).toContain(' 1  bbs.example.com:2323  Example\r\n');
+    const text = drain();
+    expect(text).toContain(' 1  bbs.example.com:2323  Example\r\n');
+    expect(text).toContain(' 2  ws.example.net:23  Direct *\r\n');
   });
 
   it('a failed call gives NO CARRIER', () => {
@@ -97,17 +102,61 @@ describe('telnet modem', () => {
     expect(modem.online).toBe(false);
   });
 
-  it('passes data both ways, telnet-escaped', () => {
+  it('passes data both ways, telnet-escaped (NVT until BINARY is agreed)', () => {
     const { modem, line, type, drain } = setup();
     type('ATDT1\r');
     line.handlers!.onOpen();
     drain();
-    line.handlers!.onData(bytes(72, 105, IAC, IAC, 13, 0, 10));
+    line.handlers!.onData(bytes(IAC, NOP, 72, 105, IAC, IAC, 13, 0, 10));
     expect([...drain()].map((c) => c.charCodeAt(0))).toEqual([72, 105, 255, 13, 10]);
+    line.sent = [];
     modem.write(0x41);
     modem.write(0xff);
     modem.write(13);
     expect(line.sent).toEqual([0x41, IAC, IAC, 13, 0]);
+  });
+
+  it('in BINARY mode CR and NUL pass untouched', () => {
+    const { modem, line, type, drain } = setup();
+    type('ATDT1\r');
+    line.handlers!.onOpen();
+    drain();
+    line.handlers!.onData(bytes(IAC, DO, 0, IAC, WILL, 0)); // answers to our requests
+    expect(modem.binary).toBe(true);
+    expect(line.sent).toEqual([IAC, WILL, 0, IAC, DO, 0]); // no second answer
+    line.handlers!.onData(bytes(13, 0, IAC, IAC, 0));
+    expect([...drain()].map((c) => c.charCodeAt(0))).toEqual([13, 0, 255, 0]);
+    line.sent = [];
+    modem.write(13);
+    modem.write(0);
+    modem.write(0xff);
+    expect(line.sent).toEqual([13, 0, IAC, IAC]);
+  });
+
+  it('a peer that never speaks telnet gets raw bytes', () => {
+    const { modem, line, type, drain } = setup();
+    type('ATDT1\r');
+    line.handlers!.onOpen();
+    drain();
+    modem.write(13);
+    modem.write(0xff);
+    expect(line.sent).toEqual([13, 0xff]);
+  });
+
+  it('dials WebSocket addresses, from the phone book or typed in', () => {
+    const { line, type, drain } = setup();
+    type('ATDT2\r');
+    line.handlers!.onOpen('DIRECT');
+    expect(drain()).toContain('CONNECT DIRECT\r\n');
+    line.handlers!.onClose();
+    type('ATD ws.example.net\r');
+    line.handlers!.onClose();
+    type('ATDT wss://Other.Example.org:4443/ws\r');
+    expect(line.calls).toEqual([
+      { host: 'ws.example.net', port: 23, ws: 'wss://ws.example.net:11235/' },
+      { host: 'ws.example.net', port: 23, ws: 'wss://ws.example.net:11235/' },
+      { host: 'other.example.org', port: 4443, ws: 'wss://other.example.org:4443/ws' },
+    ]);
   });
 
   it('negotiates echo, SGA, terminal type and window size', () => {
@@ -121,6 +170,7 @@ describe('telnet modem', () => {
     ));
     expect(drain()).toBe('OK');
     expect(line.sent).toEqual([
+      IAC, WILL, 0, IAC, DO, 0, // asks for BINARY once it sees telnet
       IAC, DO, 1, IAC, DO, 3, IAC, WILL, 24,
       IAC, WILL, 31, IAC, SB, 31, 0, 80, 0, 25, IAC, SE,
       IAC, WONT, 32, IAC, DONT, 99,
@@ -141,7 +191,7 @@ describe('telnet modem', () => {
     line.handlers!.onData(bytes(WILL));
     line.handlers!.onData(bytes(1, 66));
     expect(drain()).toBe('AB');
-    expect(line.sent).toEqual([IAC, DO, 1]);
+    expect(line.sent).toEqual([IAC, WILL, 0, IAC, DO, 0, IAC, DO, 1]);
   });
 
   it('+++ with guard time escapes to command mode, ATO resumes, ATH hangs up', () => {

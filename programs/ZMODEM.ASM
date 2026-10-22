@@ -1,0 +1,1458 @@
+;	ZMODEM - file transfer over the A-Prompt telnet modem.
+;	A-Prompt sample program. Assemble with ASM ZMODEM, then LOAD ZMODEM.
+;	  ZMODEM R [d:]       receive the files the other end sends (a batch
+;	                      is fine) to the current drive or d:
+;	  ZMODEM S FILE.EXT   send one file
+;	CRC-16 throughout: ZMODEM never offers CRC-32, so senders use 16.
+;	Receives stream to disk; errors restart from the last good byte
+;	(ZRPOS). Dial with TERM first; Ctrl-] in TERM leaves the call up, and
+;	TERM says when the BBS starts a transfer. Ctrl-X cancels. Timeouts
+;	count seconds from BDOS 105 (CP/M 3 T_GET).
+
+BDOS	EQU	5
+FCB1	EQU	5CH
+FCB2	EQU	6CH
+CONOUT	EQU	2
+PSTR	EQU	9
+OPENF	EQU	15
+CLOSEF	EQU	16
+DELF	EQU	19
+READF	EQU	20
+WRITEF	EQU	21
+MAKEF	EQU	22
+SETDMA	EQU	26
+RREAD	EQU	33
+FSIZE	EQU	35
+TGET	EQU	105
+MSTAT	EQU	04H
+MDATA	EQU	05H
+RXRDY	EQU	01H
+DCD	EQU	80H
+CAN	EQU	18H
+CTRLC	EQU	03H
+BS	EQU	08H
+XON	EQU	11H
+CR	EQU	13
+LF	EQU	10
+
+ZDLE	EQU	18H		; ZMODEM escape (the same byte as CAN)
+ZRQINI	EQU	0		; frame types
+ZRINIT	EQU	1
+ZSINIT	EQU	2
+ZACK	EQU	3
+ZFILE	EQU	4
+ZSKIP	EQU	5
+ZNAK	EQU	6
+ZFIN	EQU	8
+ZRPOS	EQU	9
+ZDATA	EQU	10
+ZEOF	EQU	11
+ZCHALL	EQU	14
+ZCRCE	EQU	68H		; subpacket ends: h i j k
+ZCRCG	EQU	69H
+ZCRCQ	EQU	6AH
+ZCRCW	EQU	6BH
+RXFLGS	EQU	03H		; ZRINIT: CANFDX + CANOVIO
+
+	ORG	100H
+
+START:	LXI	SP,STACK
+	LHLD	1		; BIOS CONST and CONIN for Ctrl-X
+	LXI	D,3
+	DAD	D
+	SHLD	CONST+1
+	DAD	D
+	SHLD	CONIN+1
+	CALL	MKCRC
+
+	LXI	H,FCB2		; FCB from the second argument
+	LXI	D,FCB
+	MVI	B,12
+COPY:	MOV	A,M
+	STAX	D
+	INX	H
+	INX	D
+	DCR	B
+	JNZ	COPY
+	CALL	CLRFCB
+
+	IN	MSTAT
+	ANI	DCD
+	LXI	D,SNOCAR
+	JZ	EXITM
+	LDA	FCB1+2
+	CPI	' '
+	JNZ	USAGE
+	LDA	FCB1+1
+	CPI	'R'
+	JZ	ZRCV
+	CPI	'S'
+	JNZ	USAGE
+	LDA	FCB+1
+	CPI	' '
+	JNZ	ZSND
+USAGE:	LXI	D,SUSAGE
+	JMP	EXITM
+
+;=======================================================================
+; Receive
+
+ZRCV:	LXI	D,SRCV
+	CALL	PRINT
+
+ZRI:	CALL	CLRTX		; ZRINIT: ready, full duplex, no CRC-32
+	MVI	A,RXFLGS
+	STA	TXH+3
+	MVI	A,ZRINIT
+	CALL	ZSHHDR
+ZR1:	CALL	ZGETH
+	JC	ZR1E
+	CPI	ZRQINI
+	JZ	ZRI
+	CPI	ZSINIT
+	JZ	ZRSIN
+	CPI	ZFILE
+	JZ	ZRFILE
+	CPI	ZFIN
+	JZ	ZRFIN
+	JMP	ZRI
+ZR1E:	CALL	ERRCHK
+	JMP	ZRI
+
+ZRSIN:	CALL	ZRDATA		; attention string: not needed here
+	JC	ZRI
+	CALL	CLRTX
+	MVI	A,ZACK
+	CALL	ZSHHDR
+	JMP	ZR1
+
+ZRFILE:	CALL	ZRDATA		; file name, size, ...
+	JNC	ZRF1
+	CALL	ERRCHK
+	CALL	CLRTX
+	MVI	A,ZNAK
+	CALL	ZSHHDR
+	JMP	ZR1
+ZRF1:	XRA	A
+	STA	ERRS
+	CALL	MKNAME
+	LXI	D,FCB
+	MVI	C,DELF
+	CALL	BDOS
+	LXI	D,FCB
+	MVI	C,MAKEF
+	CALL	BDOS
+	INR	A
+	LXI	D,SDIRF
+	JZ	FAIL
+	MVI	A,1
+	STA	FOPEN
+	LXI	D,SFILE
+	CALL	PRINT
+	CALL	PFNAME
+	LXI	H,0
+	SHLD	RXPOS
+	SHLD	RXPOS+2
+	XRA	A
+	STA	RCNT
+	STA	DOTS
+
+ZRP:	LXI	H,RXPOS		; ZRPOS: send from here
+	CALL	SETTX
+	MVI	A,ZRPOS
+	CALL	ZSHHDR
+ZRD:	CALL	ZGETH
+	JC	ZRDE
+	CPI	ZDATA
+	JZ	ZRDF
+	CPI	ZEOF
+	JZ	ZREOF
+	CPI	ZFILE		; it missed our ZRPOS
+	JZ	ZRFAG
+	CPI	ZNAK
+	JZ	ZRP
+	CPI	ZFIN
+	JZ	ZRFIN
+	JMP	ZRD
+ZRDE:	CALL	ERRCHK
+	JMP	ZRP
+ZRFAG:	CALL	ZRDATA
+	JMP	ZRP
+
+ZRDF:	CALL	SAMEPOS		; data for where we are?
+	JNZ	ZRP
+ZRSUB:	CALL	ZRDATA
+	JC	ZRSE
+	XRA	A
+	STA	ERRS
+	CALL	APPEND
+	LDA	ZEND
+	CPI	ZCRCG
+	JZ	ZRSUB
+	CPI	ZCRCE
+	JZ	ZRD
+	PUSH	PSW		; ZCRCQ and ZCRCW want a ZACK
+	LXI	H,RXPOS
+	CALL	SETTX
+	MVI	A,ZACK
+	CALL	ZSHHDR
+	POP	PSW
+	CPI	ZCRCQ
+	JZ	ZRSUB
+	JMP	ZRD
+ZRSE:	CALL	ERRCHK
+	JMP	ZRP
+
+ZREOF:	CALL	SAMEPOS		; a stale ZEOF is ignored
+	JNZ	ZRD
+	CALL	FLUSH
+	LXI	D,SOK
+	CALL	PRINT
+	JMP	ZRI
+
+ZRFIN:	CALL	FLUSH
+	CALL	CLRTX
+	MVI	A,ZFIN
+	CALL	ZSHHDR
+	MVI	B,2		; the sender's "OO"
+	CALL	RECV
+	CALL	RECV
+	LXI	D,SDONE
+	JMP	EXITM
+
+; SAMEPOS: Z when the received header holds RXPOS.
+SAMEPOS:
+	LXI	H,HDR
+	LXI	D,RXPOS
+	MVI	B,4
+SP1:	LDAX	D
+	CMP	M
+	RNZ
+	INX	H
+	INX	D
+	DCR	B
+	JNZ	SP1
+	RET
+
+; APPEND: adds the subpacket to the file through the record buffer.
+APPEND:	LHLD	SUBLEN
+	MOV	B,H
+	MOV	C,L
+	LHLD	RXPOS		; RXPOS += length
+	DAD	B
+	SHLD	RXPOS
+	JNC	AP0
+	LHLD	RXPOS+2
+	INX	H
+	SHLD	RXPOS+2
+AP0:	LXI	D,SUBBUF
+AP1:	MOV	A,B
+	ORA	C
+	RZ
+	LDA	RCNT
+	MOV	L,A
+	MVI	H,0
+	PUSH	D
+	LXI	D,RECBUF
+	DAD	D
+	POP	D
+	LDAX	D
+	MOV	M,A
+	INX	D
+	LDA	RCNT
+	INR	A
+	STA	RCNT
+	CPI	128
+	CZ	WREC
+	DCX	B
+	JMP	AP1
+
+; WREC: writes the record buffer. Keeps BC and DE.
+WREC:	PUSH	B
+	PUSH	D
+	LXI	D,RECBUF
+	MVI	C,SETDMA
+	CALL	BDOS
+	LXI	D,FCB
+	MVI	C,WRITEF
+	CALL	BDOS
+	ORA	A
+	LXI	D,SFULL
+	JNZ	FAIL
+	XRA	A
+	STA	RCNT
+	LXI	H,DOTS		; a dot per 1K
+	INR	M
+	MOV	A,M
+	ANI	7
+	CZ	DOT
+	POP	D
+	POP	B
+	RET
+
+; FLUSH: pads the last record with ^Z and closes the file.
+FLUSH:	LDA	FOPEN
+	ORA	A
+	RZ
+	LDA	RCNT
+	ORA	A
+	JZ	FL2
+FL1:	MOV	L,A
+	MVI	H,0
+	LXI	D,RECBUF
+	DAD	D
+	MVI	M,1AH
+	INR	A
+	CPI	128
+	JC	FL1
+	CALL	WREC
+FL2:	JMP	CLSF
+
+; MKNAME: FCB name from the path in SUBBUF: the part after the last
+; / or \, base name up to the last dot (8 chars), extension (3 chars).
+MKNAME:	CALL	CLRFCB
+	LXI	H,FCB+1
+	MVI	B,11
+MN0:	MVI	M,' '
+	INX	H
+	DCR	B
+	JNZ	MN0
+	LXI	H,SUBBUF
+	SHLD	NSTART
+	LXI	D,0		; last dot
+MN1:	MOV	A,M
+	ORA	A
+	JZ	MN3
+	CPI	'/'
+	JZ	MN2
+	CPI	5CH
+	JZ	MN2
+	CPI	'.'
+	JNZ	MN1N
+	MOV	D,H
+	MOV	E,L
+MN1N:	INX	H
+	JMP	MN1
+MN2:	INX	H
+	SHLD	NSTART
+	LXI	D,0
+	JMP	MN1
+MN3:	SHLD	NEND
+	XCHG
+	SHLD	DOTP
+	MOV	A,H		; no dot: the base runs to the end
+	ORA	L
+	JNZ	MN4
+	LHLD	NEND
+MN4:	XCHG			; DE = end of the base name
+	LHLD	NSTART
+	LXI	B,FCB+1
+	MVI	A,8
+	CALL	CPYN
+	LDA	FCB+1
+	CPI	' '
+	JNZ	MN5
+	LXI	H,SFILEN	; nameless (".profile"): FILE
+	LXI	D,FCB+1
+	MVI	B,4
+MN4A:	MOV	A,M
+	STAX	D
+	INX	H
+	INX	D
+	DCR	B
+	JNZ	MN4A
+MN5:	LHLD	DOTP
+	MOV	A,H
+	ORA	L
+	RZ
+	INX	H
+	XCHG
+	LHLD	NEND
+	XCHG
+	LXI	B,FCB+9
+	MVI	A,3
+	JMP	CPYN
+
+; CPYN: copies from HL up to DE (exclusive), at most A chars, to BC,
+; making each one a valid CP/M file name character.
+CPYN:	STA	CNT
+CP1:	LDA	CNT
+	ORA	A
+	RZ
+	MOV	A,H
+	CMP	D
+	JNZ	CP2
+	MOV	A,L
+	CMP	E
+	RZ
+CP2:	MOV	A,M
+	CALL	FIXCH
+	STAX	B
+	INX	H
+	INX	B
+	LDA	CNT
+	DCR	A
+	STA	CNT
+	JMP	CP1
+
+FIXCH:	CPI	61H		; lower case to upper
+	JC	FX1
+	CPI	7BH
+	JNC	FX1
+	SUI	20H
+	RET
+FX1:	CPI	21H
+	JC	FXBAD
+	CPI	7FH
+	JNC	FXBAD
+	PUSH	H		; not one CP/M reserves
+	PUSH	B
+	LXI	H,BADCH
+	MOV	B,A
+FX2:	MOV	A,M
+	ORA	A
+	JZ	FXOK
+	CMP	B
+	JZ	FXBD2
+	INX	H
+	JMP	FX2
+FXOK:	MOV	A,B
+	POP	B
+	POP	H
+	RET
+FXBD2:	POP	B
+	POP	H
+FXBAD:	MVI	A,'-'
+	RET
+
+;=======================================================================
+; Send
+
+ZSND:	LXI	D,FCB
+	MVI	C,OPENF
+	CALL	BDOS
+	INR	A
+	LXI	D,SNOFIL
+	JZ	EXITM
+	LXI	D,FCB		; size: records * 128
+	MVI	C,FSIZE
+	CALL	BDOS
+	XRA	A
+	STA	FSZ
+	LHLD	FCB+33
+	SHLD	FSZ+1
+	LDA	FCB+35
+	STA	FSZ+3
+	CALL	FSZSHR		; FSZ = records << 7
+	LXI	D,SSND
+	CALL	PRINT
+	CALL	PFNAME
+
+	LXI	H,SRZ		; "rz" starts a Unix receiver
+	CALL	PUTS
+ZSQ:	CALL	CLRTX
+	MVI	A,ZRQINI
+	CALL	ZSHHDR
+ZS1:	CALL	ZGETH
+	JC	ZS1E
+	CPI	ZRINIT
+	JZ	ZSFILE
+	CPI	ZCHALL		; echo the challenge back
+	JNZ	ZS1
+	LXI	H,HDR
+	CALL	SETTX
+	MVI	A,ZACK
+	CALL	ZSHHDR
+	JMP	ZS1
+ZS1E:	CALL	ERRCHK
+	JMP	ZSQ
+
+ZSFILE:	XRA	A
+	STA	ERRS
+ZSF0:	CALL	MKINFO		; name, NUL, size, NUL
+	CALL	CLRTX
+	MVI	A,ZFILE
+	CALL	ZSBHDR
+	LXI	H,SUBBUF
+	MVI	A,ZCRCW
+	CALL	ZSDATA
+ZS2:	CALL	ZGETH
+	JC	ZS2E
+	CPI	ZRPOS
+	JZ	ZSPOS
+	CPI	ZSKIP
+	JZ	ZSFIN
+	JMP	ZS2		; a repeated ZRINIT is stale: wait
+ZS2E:	CALL	ERRCHK		; timeout: send ZFILE again
+	JMP	ZSF0
+
+; ZSPOS: (re)start the data at the position in HDR.
+ZSPOS:	LXI	H,HDR
+	LXI	D,TXPOS
+	MVI	B,4
+ZSP1:	MOV	A,M
+	STAX	D
+	INX	H
+	INX	D
+	DCR	B
+	JNZ	ZSP1
+	CALL	SEEK
+	JC	ZSEOF		; at or past the end
+	LXI	H,TXPOS
+	CALL	SETTX
+	MVI	A,ZDATA
+	CALL	ZSBHDR
+
+ZSLOOP:	LXI	H,0		; one subpacket of up to 1K
+	SHLD	CRC
+	LXI	B,1024
+ZSL1:	CALL	GETFB
+	JC	ZSLEOF
+	CALL	ZPUTC
+	CALL	INCPOS
+	DCX	B
+	MOV	A,B
+	ORA	C
+	JNZ	ZSL1
+	MVI	A,ZCRCG
+	STA	ZEND
+	CALL	ZSEND
+	CALL	DOT
+	CALL	ZSCHK		; the receiver may want a ZRPOS
+	JMP	ZSLOOP
+ZSLEOF:	MVI	A,ZCRCE
+	STA	ZEND
+	CALL	ZSEND
+
+ZSEOF:	LXI	H,TXPOS
+	CALL	SETTX
+	MVI	A,ZEOF
+	CALL	ZSBHDR
+ZS3:	CALL	ZGETH
+	JC	ZS3E
+	CPI	ZRINIT
+	JZ	ZSFIN
+	CPI	ZRPOS
+	JZ	ZSPOS
+	JMP	ZS3
+ZS3E:	CALL	ERRCHK
+	JMP	ZSEOF
+
+ZSFIN:	XRA	A
+	STA	ERRS
+ZSF1:	CALL	CLRTX
+	MVI	A,ZFIN
+	CALL	ZSHHDR
+ZS4:	CALL	ZGETH
+	JC	ZS4E
+	CPI	ZFIN
+	JNZ	ZS4
+	MVI	A,'O'
+	CALL	PUT
+	CALL	PUT
+	LXI	D,SDONE
+	JMP	EXITM
+ZS4E:	CALL	ERRCHK
+	JMP	ZSF1
+
+; ZSCHK: a '*' from the receiver while sending starts a header.
+ZSCHK:	IN	MSTAT
+	ANI	RXRDY
+	RZ
+	IN	MDATA
+	CPI	'*'
+	RNZ
+	CALL	ZGSTAR
+	RC
+	CPI	ZRPOS
+	RNZ
+	POP	H		; drop the return address
+	JMP	ZSPOS
+
+; SEEK: positions the file at TXPOS. Carry set at the end of the file.
+SEEK:	LXI	H,TXPOS		; record = TXPOS >> 7
+	LXI	D,TMP
+	MVI	B,4
+SK1:	MOV	A,M
+	STAX	D
+	INX	H
+	INX	D
+	DCR	B
+	JNZ	SK1
+	LDA	TMP
+	ADD	A
+	LDA	TMP+1
+	RAL
+	STA	FCB+33
+	LDA	TMP+2
+	RAL
+	STA	FCB+34
+	LDA	TMP+3
+	RAL
+	STA	FCB+35
+	LXI	D,RECBUF	; a random read sets the position;
+	MVI	C,SETDMA	; the next sequential read rereads it
+	CALL	BDOS
+	LXI	D,FCB
+	MVI	C,RREAD
+	CALL	BDOS
+	ORA	A
+	STC
+	RNZ
+	MVI	A,128
+	STA	RIDX
+	LDA	TMP		; skip to the byte
+	ANI	7FH
+SK2:	ORA	A
+	RZ
+	PUSH	PSW
+	CALL	GETFB
+	POP	PSW
+	DCR	A
+	JMP	SK2
+
+; GETFB: next file byte in A, carry set at the end. Keeps BC, DE, HL.
+GETFB:	LDA	RIDX
+	CPI	128
+	JC	GF1
+	PUSH	B
+	PUSH	D
+	PUSH	H
+	LXI	D,RECBUF
+	MVI	C,SETDMA
+	CALL	BDOS
+	LXI	D,FCB
+	MVI	C,READF
+	CALL	BDOS
+	POP	H
+	POP	D
+	POP	B
+	ORA	A
+	STC
+	RNZ
+	XRA	A
+GF1:	PUSH	H
+	PUSH	D
+	MOV	E,A
+	MVI	D,0
+	LXI	H,RECBUF
+	DAD	D
+	INR	A
+	STA	RIDX
+	MOV	A,M
+	POP	D
+	POP	H
+	ORA	A
+	RET
+
+INCPOS:	PUSH	H		; TXPOS + 1
+	LHLD	TXPOS
+	INX	H
+	SHLD	TXPOS
+	MOV	A,H
+	ORA	L
+	JNZ	IP1
+	LHLD	TXPOS+2
+	INX	H
+	SHLD	TXPOS+2
+IP1:	POP	H
+	RET
+
+; FSZSHR: FSZ holds records in bytes 1-3; shift right once to get
+; records * 128 in bytes 0-3.
+FSZSHR:	LDA	FSZ+3
+	ORA	A
+	RAR
+	STA	FSZ+3
+	LDA	FSZ+2
+	RAR
+	STA	FSZ+2
+	LDA	FSZ+1
+	RAR
+	STA	FSZ+1
+	LDA	FSZ
+	RAR
+	STA	FSZ
+	RET
+
+; MKINFO: "name.ext", NUL, decimal size, NUL in SUBBUF; SUBLEN = length.
+MKINFO:	LXI	H,SUBBUF
+	LXI	D,FCB+1
+	MVI	B,8
+MI1:	LDAX	D
+	ANI	7FH
+	CPI	' '
+	JZ	MI2
+	CALL	LOWER
+	MOV	M,A
+	INX	H
+MI2:	INX	D
+	DCR	B
+	JNZ	MI1
+	LDA	FCB+9
+	CPI	' '
+	JZ	MI4
+	MVI	M,'.'
+	INX	H
+	LXI	D,FCB+9
+	MVI	B,3
+MI3:	LDAX	D
+	ANI	7FH		; attribute bits
+	CPI	' '
+	JZ	MI3A
+	CALL	LOWER
+	MOV	M,A
+	INX	H
+MI3A:	INX	D
+	DCR	B
+	JNZ	MI3
+MI4:	MVI	M,0
+	INX	H
+	PUSH	H
+	LXI	H,FSZ		; size to decimal
+	LXI	D,NUM
+	MVI	B,4
+MI5:	MOV	A,M
+	STAX	D
+	INX	H
+	INX	D
+	DCR	B
+	JNZ	MI5
+	POP	H
+	CALL	DEC32
+	MVI	M,0
+	INX	H
+	LXI	D,SUBBUF	; SUBLEN = HL - SUBBUF
+	MOV	A,L
+	SUB	E
+	MOV	L,A
+	MOV	A,H
+	SBB	D
+	MOV	H,A
+	SHLD	SUBLEN
+	RET
+
+LOWER:	CPI	41H
+	RC
+	CPI	5BH
+	RNC
+	ADI	20H
+	RET
+
+; DEC32: NUM in decimal at HL; HL ends after the last digit.
+DEC32:	SHLD	DPTR
+	LXI	B,0		; end marker
+	PUSH	B
+DC1:	CALL	DIV10
+	ADI	'0'
+	MOV	B,A
+	PUSH	B
+	LXI	H,NUM
+	MOV	A,M
+	INX	H
+	ORA	M
+	INX	H
+	ORA	M
+	INX	H
+	ORA	M
+	JNZ	DC1
+	LHLD	DPTR
+DC2:	POP	B
+	MOV	A,B
+	ORA	A
+	RZ
+	MOV	M,A
+	INX	H
+	JMP	DC2
+
+; DIV10: NUM /= 10, remainder in A.
+DIV10:	LXI	H,NUM+3
+	MVI	B,4
+	MVI	E,0
+DV1:	MOV	D,E
+	MOV	E,M
+	MVI	C,0
+DV2:	MOV	A,E
+	SUI	10
+	MOV	E,A
+	MOV	A,D
+	SBI	0
+	MOV	D,A
+	JC	DV3
+	INR	C
+	JMP	DV2
+DV3:	MOV	A,E
+	ADI	10
+	MOV	E,A
+	MOV	M,C
+	DCX	H
+	DCR	B
+	JNZ	DV1
+	MOV	A,E
+	RET
+
+;=======================================================================
+; ZMODEM frames
+
+; ZGETH: waits for a header. A = frame type with carry clear and the
+; four header bytes in HDR; carry set on error (A = 0) or cancel (A = 1).
+ZGETH:	XRA	A
+	STA	CANS
+ZG0:	MVI	B,10
+	CALL	RECV
+	JC	ZGERR
+	CPI	'*'
+	JZ	ZG1
+	CPI	CAN
+	JNZ	ZGG
+	LDA	CANS		; five CANs cancel
+	INR	A
+	STA	CANS
+	CPI	5
+	JC	ZG0
+	JMP	ZGCAN
+ZGG:	XRA	A		; noise, such as the rest of a frame sent
+	STA	CANS		; before our ZRPOS: only silence is an error
+	JMP	ZG0
+ZGERR:	XRA	A
+	STC
+	RET
+ZGCAN:	MVI	A,1
+	STC
+	RET
+
+; ZGSTAR: as ZGETH, after a '*' already read.
+ZGSTAR:	XRA	A
+	STA	CANS
+	MVI	B,10
+ZG1:	CALL	RECV
+	JC	ZGERR
+	CPI	'*'
+	JZ	ZG1
+	CPI	ZDLE
+	JNZ	ZGG
+	CALL	RECV
+	JC	ZGERR
+	CPI	'A'
+	JZ	ZGBIN
+	CPI	'B'
+	JZ	ZGHEX
+	JMP	ZGG
+
+ZGBIN:	LXI	H,0		; binary header, CRC-16
+	SHLD	CRC
+	LXI	H,HTYPE
+	MVI	E,5
+ZGB1:	CALL	ZDLRD
+	JC	ZGBAD
+	MOV	M,A
+	CALL	CRCUP
+	INX	H
+	DCR	E
+	JNZ	ZGB1
+	CALL	ZDLRD
+	JC	ZGBAD
+	STA	RCRC+1
+	CALL	ZDLRD
+	JC	ZGBAD
+	STA	RCRC
+	JMP	ZGCHK
+ZGBAD:	CPI	1
+	JZ	ZGCAN
+	JMP	ZGERR
+
+ZGHEX:	LXI	H,0		; hex header
+	SHLD	CRC
+	LXI	H,HTYPE
+	MVI	E,5
+ZGH1:	CALL	GETHEX
+	JC	ZGERR
+	MOV	M,A
+	CALL	CRCUP
+	INX	H
+	DCR	E
+	JNZ	ZGH1
+	CALL	GETHEX
+	JC	ZGERR
+	STA	RCRC+1
+	CALL	GETHEX
+	JC	ZGERR
+	STA	RCRC
+
+ZGCHK:	LHLD	CRC
+	XCHG
+	LHLD	RCRC
+	MOV	A,L
+	CMP	E
+	JNZ	ZGERR
+	MOV	A,H
+	CMP	D
+	JNZ	ZGERR
+	LDA	HTYPE
+	ORA	A
+	RET
+
+; GETHEX: two hex digits; A = byte, carry set on error.
+GETHEX:	CALL	HEXNIB
+	RC
+	RLC
+	RLC
+	RLC
+	RLC
+	MOV	C,A
+	CALL	HEXNIB
+	RC
+	ORA	C
+	RET
+HEXNIB:	CALL	RECV
+	RC
+	SUI	30H
+	JC	HXBAD
+	CPI	10
+	JC	HXOK
+	SUI	7		; A-F
+	CPI	10
+	JC	HXBAD
+	CPI	16
+	JC	HXOK
+	SUI	32		; a-f
+	CPI	10
+	JC	HXBAD
+	CPI	16
+	JC	HXOK
+HXBAD:	XRA	A
+	STC
+	RET
+HXOK:	ORA	A
+	RET
+
+; ZDLRD: one ZDLE-decoded byte. Carry clear: A = data. Carry set:
+; A = 0 error or timeout, 1 cancel, or the subpacket end (ZCRCE..W).
+ZDLRD:	MVI	B,10
+ZDL0:	CALL	RECV
+	JC	ZDLTO
+	CPI	ZDLE
+	JZ	ZDL1
+	CPI	XON		; flow control is noise here
+	JZ	ZDL0
+	CPI	13H
+	JZ	ZDL0
+	CPI	91H
+	JZ	ZDL0
+	CPI	93H
+	JZ	ZDL0
+	ORA	A
+	RET
+ZDL1:	CALL	RECV
+	JC	ZDLTO
+	CPI	CAN		; ZDLE CAN: a cancel
+	JZ	ZDLCAN
+	CPI	ZCRCE
+	JC	ZDL2
+	CPI	ZCRCW+1
+	JC	ZDLEND
+	CPI	6CH		; ZRUB0
+	JNZ	ZDL3
+	MVI	A,7FH
+	ORA	A
+	RET
+ZDL3:	CPI	6DH		; ZRUB1
+	JNZ	ZDL2
+	MVI	A,0FFH
+	ORA	A
+	RET
+ZDL2:	CPI	XON
+	JZ	ZDL1
+	CPI	13H
+	JZ	ZDL1
+	CPI	91H
+	JZ	ZDL1
+	CPI	93H
+	JZ	ZDL1
+	MOV	C,A
+	ANI	60H
+	CPI	40H
+	JNZ	ZDLTO
+	MOV	A,C
+	XRI	40H
+	ORA	A
+	RET
+ZDLEND:	STC
+	RET
+ZDLTO:	XRA	A
+	STC
+	RET
+ZDLCAN:	MVI	A,1
+	STC
+	RET
+
+; ZRDATA: a data subpacket into SUBBUF, length in SUBLEN, its end in
+; ZEND. Carry set on error (A = 0) or cancel (A = 1).
+ZRDATA:	LXI	H,0
+	SHLD	CRC
+	LXI	H,SUBBUF
+	LXI	D,0
+ZRD1:	CALL	ZDLRD
+	JC	ZRDSP
+	MOV	M,A
+	CALL	CRCUP
+	INX	H
+	INX	D
+	MOV	A,D		; at most 1K
+	CPI	4
+	JC	ZRD1
+	JNZ	ZRDBAD
+	MOV	A,E
+	ORA	A
+	JZ	ZRD1
+ZRDBAD:	XRA	A
+	STC
+	RET
+ZRDSP:	CPI	ZCRCE
+	JC	ZRDERR
+	STA	ZEND
+	CALL	CRCUP		; the end byte is in the CRC
+	XCHG
+	SHLD	SUBLEN
+	CALL	ZDLRD
+	JC	ZRDERR
+	STA	RCRC+1
+	CALL	ZDLRD
+	JC	ZRDERR
+	STA	RCRC
+	LHLD	CRC
+	XCHG
+	LHLD	RCRC
+	MOV	A,L
+	CMP	E
+	JNZ	ZRDBAD
+	MOV	A,H
+	CMP	D
+	JNZ	ZRDBAD
+	LDA	ZEND
+	ORA	A
+	RET
+ZRDERR:	CPI	1
+	JNZ	ZRDBAD
+	STC
+	RET
+
+; ZSHHDR: hex header of type A with TXH.
+ZSHHDR:	PUSH	PSW
+	MVI	A,'*'
+	CALL	PUT
+	CALL	PUT
+	MVI	A,ZDLE
+	CALL	PUT
+	MVI	A,'B'
+	CALL	PUT
+	LXI	H,0
+	SHLD	CRC
+	POP	PSW
+	PUSH	PSW
+	CALL	SHHB
+	LXI	H,TXH
+	MVI	B,4
+SHH1:	MOV	A,M
+	CALL	SHHB
+	INX	H
+	DCR	B
+	JNZ	SHH1
+	LDA	CRC+1
+	CALL	PHEX
+	LDA	CRC
+	CALL	PHEX
+	MVI	A,CR
+	CALL	PUT
+	MVI	A,8AH
+	CALL	PUT
+	POP	PSW
+	CPI	ZFIN
+	RZ
+	CPI	ZACK
+	RZ
+	MVI	A,XON
+	JMP	PUT
+
+SHHB:	PUSH	PSW
+	CALL	CRCUP
+	POP	PSW
+PHEX:	PUSH	PSW		; two lower-case hex digits
+	RRC
+	RRC
+	RRC
+	RRC
+	CALL	PNIB
+	POP	PSW
+PNIB:	ANI	0FH
+	ADI	30H
+	CPI	3AH
+	JC	PUT
+	ADI	39
+	JMP	PUT
+
+; ZSBHDR: binary header (CRC-16) of type A with TXH.
+ZSBHDR:	PUSH	PSW
+	MVI	A,'*'
+	CALL	PUT
+	MVI	A,ZDLE
+	CALL	PUT
+	MVI	A,'A'
+	CALL	PUT
+	LXI	H,0
+	SHLD	CRC
+	POP	PSW
+	CALL	ZPUTC
+	LXI	H,TXH
+	MVI	B,4
+SBH1:	MOV	A,M
+	CALL	ZPUTC
+	INX	H
+	DCR	B
+	JNZ	SBH1
+	LDA	CRC+1
+	CALL	ZPUT
+	LDA	CRC
+	JMP	ZPUT
+
+; ZSDATA: subpacket of SUBLEN bytes at HL, ending A.
+ZSDATA:	STA	ZEND
+	PUSH	H
+	LXI	H,0
+	SHLD	CRC
+	LHLD	SUBLEN
+	MOV	B,H
+	MOV	C,L
+	POP	H
+ZSD1:	MOV	A,B
+	ORA	C
+	JZ	ZSEND
+	MOV	A,M
+	CALL	ZPUTC
+	INX	H
+	DCX	B
+	JMP	ZSD1
+
+; ZSEND: ends a subpacket with ZEND and its CRC.
+ZSEND:	MVI	A,ZDLE
+	CALL	PUT
+	LDA	ZEND
+	CALL	PUT
+	CALL	CRCUP
+	LDA	CRC+1
+	CALL	ZPUT
+	LDA	CRC
+	CALL	ZPUT
+	LDA	ZEND
+	CPI	ZCRCW
+	RNZ
+	MVI	A,XON
+	JMP	PUT
+
+ZPUTC:	PUSH	PSW		; ZPUT with the CRC
+	CALL	CRCUP
+	POP	PSW
+; ZPUT: sends A, ZDLE-escaped where the line might eat it.
+ZPUT:	CPI	ZDLE
+	JZ	ZPESC
+	CPI	10H
+	JZ	ZPESC
+	CPI	XON
+	JZ	ZPESC
+	CPI	13H
+	JZ	ZPESC
+	CPI	90H
+	JZ	ZPESC
+	CPI	91H
+	JZ	ZPESC
+	CPI	93H
+	JZ	ZPESC
+	CPI	0DH
+	JZ	ZPESC
+	CPI	8DH
+	JZ	ZPESC
+	OUT	MDATA
+	RET
+ZPESC:	PUSH	PSW
+	MVI	A,ZDLE
+	OUT	MDATA
+	POP	PSW
+	XRI	40H
+	OUT	MDATA
+	RET
+
+;=======================================================================
+; Common
+
+CLRTX:	LXI	H,0
+	SHLD	TXH
+	SHLD	TXH+2
+	RET
+
+SETTX:	LXI	D,TXH		; TXH = the 4 bytes at HL
+	MVI	B,4
+ST1:	MOV	A,M
+	STAX	D
+	INX	H
+	INX	D
+	DCR	B
+	JNZ	ST1
+	RET
+
+CLRFCB:	LXI	H,FCB+12	; EX through R2
+	MVI	B,24
+CF1:	MVI	M,0
+	INX	H
+	DCR	B
+	JNZ	CF1
+	RET
+
+; ERRCHK: after a failed header or subpacket (A = 1 for cancel).
+ERRCHK:	CPI	1
+	LXI	D,SCANCL
+	JZ	FAIL
+	LDA	ERRS
+	INR	A
+	STA	ERRS
+	CPI	10
+	RC
+	LXI	D,SERRS
+	JMP	FAIL
+
+; RECV: waits up to B seconds for a modem byte. A = byte with carry
+; clear, or carry set on timeout. Keeps BC, DE and HL.
+RECV:	IN	MSTAT
+	ANI	RXRDY
+	JZ	RSLOW
+	IN	MDATA
+	ORA	A
+	RET
+RSLOW:	PUSH	B
+	PUSH	D
+	PUSH	H
+	MOV	A,B
+	STA	TLEFT
+	CALL	GETSEC
+	STA	TSEC
+RS1:	LXI	H,2000		; polls between clock reads
+RS2:	IN	MSTAT
+	ANI	RXRDY
+	JNZ	RSGOT
+	DCX	H
+	MOV	A,H
+	ORA	L
+	JNZ	RS2
+	CALL	CHKABT
+	CALL	GETSEC
+	LXI	H,TSEC
+	CMP	M
+	JZ	RS1
+	MOV	M,A
+	LXI	H,TLEFT
+	DCR	M
+	JNZ	RS1
+	POP	H
+	POP	D
+	POP	B
+	STC
+	RET
+RSGOT:	IN	MDATA
+	POP	H
+	POP	D
+	POP	B
+	ORA	A
+	RET
+
+GETSEC:	MVI	C,TGET		; A = seconds (BCD)
+	LXI	D,TBUF
+	JMP	BDOS
+
+PUT:	OUT	MDATA		; keeps A
+	RET
+
+PUTS:	MOV	A,M		; sends the string at HL up to a 0
+	ORA	A
+	RZ
+	CALL	PUT
+	INX	H
+	JMP	PUTS
+
+; CHKABT: Ctrl-X or Ctrl-C on the keyboard cancels the transfer.
+CHKABT:	CALL	CONST
+	ORA	A
+	RZ
+	CALL	CONIN
+	CPI	CAN
+	JZ	ABORT
+	CPI	CTRLC
+	RNZ
+ABORT:	LXI	D,SABORT
+	JMP	FAIL
+
+DOT:	PUSH	B
+	PUSH	D
+	PUSH	H
+	MVI	E,'.'
+	MVI	C,CONOUT
+	CALL	BDOS
+	POP	H
+	POP	D
+	POP	B
+	RET
+
+; PFNAME: prints the FCB's file name.
+PFNAME:	LXI	H,FCB+1
+	MVI	B,11
+PF1:	MOV	A,B
+	CPI	3
+	JNZ	PF2
+	PUSH	B
+	PUSH	H
+	MVI	E,'.'
+	MVI	C,CONOUT
+	CALL	BDOS
+	POP	H
+	POP	B
+PF2:	MOV	A,M
+	ANI	7FH
+	CPI	' '
+	JZ	PF3
+	PUSH	B
+	PUSH	H
+	MOV	E,A
+	MVI	C,CONOUT
+	CALL	BDOS
+	POP	H
+	POP	B
+PF3:	INX	H
+	DCR	B
+	JNZ	PF1
+	LXI	D,SCRLF
+	JMP	PRINT
+
+; FAIL: cancels the other end, keeps what was received, prints DE.
+FAIL:	PUSH	D
+	LXI	H,SCANIT
+	CALL	PUTS
+	CALL	FLUSH
+	POP	D
+EXITM:	CALL	PRINT
+	JMP	0
+
+CLSF:	LDA	FOPEN
+	ORA	A
+	RZ
+	XRA	A
+	STA	FOPEN
+	LXI	D,FCB
+	MVI	C,CLOSEF
+	JMP	BDOS
+
+PRINT:	MVI	C,PSTR
+	JMP	BDOS
+
+; MKCRC: tables for CRC-16/XMODEM (polynomial 1021H), high bytes at
+; TABHI and low bytes at TABLO, one page each.
+MKCRC:	MVI	C,0
+MK1:	MOV	H,C
+	MVI	L,0
+	MVI	B,8
+MK2:	DAD	H
+	JNC	MK3
+	MOV	A,H
+	XRI	10H
+	MOV	H,A
+	MOV	A,L
+	XRI	21H
+	MOV	L,A
+MK3:	DCR	B
+	JNZ	MK2
+	MOV	E,C
+	MVI	D,TABHI SHR 8
+	MOV	A,H
+	STAX	D
+	INR	D
+	MOV	A,L
+	STAX	D
+	INR	C
+	JNZ	MK1
+	RET
+
+; CRCUP: adds A to the CRC. Keeps BC, DE and HL.
+CRCUP:	PUSH	H
+	PUSH	D
+	LHLD	CRC
+	XRA	H
+	MOV	E,A
+	MVI	D,TABHI SHR 8
+	LDAX	D
+	XRA	L
+	MOV	H,A
+	INR	D
+	LDAX	D
+	MOV	L,A
+	SHLD	CRC
+	POP	D
+	POP	H
+	RET
+
+CONST:	JMP	0		; patched at start-up
+CONIN:	JMP	0
+
+SUSAGE:	DB	'Usage: ZMODEM R [d:]  or  ZMODEM S file',CR,LF
+	DB	'Dial with TERM first.',CR,LF,'$'
+SNOCAR:	DB	'No carrier: dial with TERM first.',CR,LF,'$'
+SDIRF:	DB	CR,LF,'Directory full.',CR,LF,'$'
+SNOFIL:	DB	'No such file.',CR,LF,'$'
+SRCV:	DB	'ZMODEM receive, Ctrl-X cancels',CR,LF,'$'
+SSND:	DB	'ZMODEM send, Ctrl-X cancels: $'
+SFILE:	DB	'Receiving $'
+SOK:	DB	' OK',CR,LF,'$'
+SDONE:	DB	CR,LF,'Transfer complete.',CR,LF,'$'
+SCANCL:	DB	CR,LF,'Cancelled by the other end.',CR,LF,'$'
+SABORT:	DB	CR,LF,'Cancelled.',CR,LF,'$'
+SERRS:	DB	CR,LF,'Too many errors.',CR,LF,'$'
+SFULL:	DB	CR,LF,'Disk full.',CR,LF,'$'
+SCRLF:	DB	CR,LF,'$'
+SFILEN:	DB	'FILE'
+SRZ:	DB	'rz',CR,0
+SCANIT:	DB	CAN,CAN,CAN,CAN,CAN,CAN,CAN,CAN
+	DB	BS,BS,BS,BS,BS,BS,BS,BS,0
+BADCH:	DB	'.,;:<>=?*[]_|',22H,0
+
+FOPEN:	DB	0
+ERRS:	DB	0
+DOTS:	DB	0
+CANS:	DB	0
+RCNT:	DB	0
+RIDX:	DB	0
+ZEND:	DB	0
+CNT:	DB	0
+TLEFT:	DB	0
+TSEC:	DB	0
+HTYPE:	DB	0		; received header: type, then 4 bytes
+HDR:	DS	4
+TXH:	DS	4
+CRC:	DW	0
+RCRC:	DW	0
+SUBLEN:	DW	0
+NSTART:	DW	0
+NEND:	DW	0
+DOTP:	DW	0
+DPTR:	DW	0
+RXPOS:	DS	4
+TXPOS:	DS	4
+FSZ:	DS	4
+NUM:	DS	4
+TMP:	DS	4
+TBUF:	DS	4
+FCB:	DS	36
+	DS	64
+STACK:
+RECBUF:	DS	128
+SUBBUF:	DS	1040
+ENDB:
+TABHI	EQU	(ENDB+255) AND 0FF00H
+TABLO	EQU	TABHI+256
+
+	END	START

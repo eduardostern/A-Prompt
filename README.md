@@ -73,10 +73,17 @@ keeps games with timing loops playable. **Reset** stops a runaway program
   speaker.
 - **Telnet modem**: a Hayes-style modem on I/O ports `04h`/`05h` (also the
   READER/PUNCH device) dials telnet BBSes. `TERM.COM` is a terminal for it:
-  `ATI` lists the phone book, `ATDT 1` or `ATDT host:port` dials, `+++`
-  escapes, `ATH` hangs up and Ctrl-] quits. Browsers cannot open TCP
-  sockets, so the call goes over a WebSocket to the site's Worker, which
-  connects only to the boards in `src/phonebook.ts`.
+  `ATI` lists the phone book, `ATDT 1`, `ATDT host:port` or
+  `ATDT wss://host:port` dials, `+++` escapes, `ATH` hangs up, and Ctrl-]
+  returns to CP/M with the call still up. Browsers cannot open TCP
+  sockets: boards with their own WebSocket gateway (marked `*` in `ATI`,
+  or any `wss://` address you dial) are reached straight from the
+  browser; the rest go over a WebSocket to the site's Worker, which
+  connects only to the boards in `src/phonebook.ts`. The modem negotiates
+  telnet BINARY mode, so file transfers are 8-bit clean.
+- **File transfer**: `XMODEM.COM` (CRC-16 or checksum; receives 128-byte
+  and 1K blocks) and `ZMODEM.COM` (CRC-16, batch receive, restart from the
+  last good byte after an error), both tested against lrzsz.
 - **Disk images**: mount/export raw 8" SSSD (77×26, standard skew 6 as in
   cpmtools' `ibm-3740` and z80pack), 512K and 4MB `.dsk`/`.img` images, and
   z80pack's 4MB hard disks (`hd-tools.dsk` and friends).
@@ -97,8 +104,10 @@ keeps games with timing loops playable. **Reset** stops a runaway program
 
 Bundled programs: **PIP**, **STAT**, **DDT**, **ED**, **ASM**, **LOAD**,
 **SUBMIT**, **DUMP**, **HELLO.COM**, **INPUT.COM**, **COLOR.COM** (shows the
-ANSI palette), **TETRIS.COM** (a colour Tetris for the ANSI terminal) and
-**TERM.COM** (a terminal for the telnet modem), with their 8080 sources, plus **DEMO.SUB** and **XSUB.SUB**.
+ANSI palette), **TETRIS.COM** (a colour Tetris for the ANSI terminal),
+**TERM.COM** (a terminal for the telnet modem), **XMODEM.COM** and
+**ZMODEM.COM** (file transfer over it), with their 8080 sources, plus
+**DEMO.SUB** and **XSUB.SUB**.
 
 ```text
 A>DIR
@@ -119,16 +128,37 @@ A>TERM
 
 ```text
 A>TERM
-ATI                      lists the phone book
-ATDT 3                   dials entry 3 (Black Flag)
-CONNECT
-...                      Ctrl-] hangs up and returns to A>
+ATI                      lists the phone book (* = direct WebSocket)
+ATDT 1                   dials entry 1 (Vertrauen): CONNECT DIRECT
+ATDT 3                   dials entry 3 (Black Flag) through the relay
+ATDT wss://host:port     any BBS WebSocket gateway, straight from the browser
+...                      Ctrl-] returns to A> with the call still up
 ```
 
-Pick the ANSI/VT100 terminal profile for ANSI art. To add a board, add it to
-`src/phonebook.ts` (the relay refuses anything else) and redeploy. During
-`npm run dev`, run `npx wrangler dev` alongside: Vite forwards `/relay` to
-it.
+Pick the ANSI/VT100 terminal profile for ANSI art. Direct calls come from
+the user's own IP; relayed calls come from Cloudflare's. To add a board, add
+it to `src/phonebook.ts` (the relay refuses anything else) and redeploy.
+During `npm run dev`, run `npx wrangler dev` alongside: Vite forwards
+`/relay` to it.
+
+### Downloading and uploading
+
+Pick ZMODEM (or XMODEM) in the BBS's file area. TERM notices a ZMODEM
+transfer starting and says what to run:
+
+```text
+[TERM: ZMODEM download - press Ctrl-] then ZMODEM R]
+A>ZMODEM R               receives the files the BBS sends (ZMODEM R B: for B:)
+A>ZMODEM S MYFILE.TXT    uploads, when the BBS waits for a ZMODEM upload
+A>XMODEM R FILE.ZIP      XMODEM needs the name on this side too
+A>XMODEM S FILE.ZIP
+A>TERM                   back to the BBS; +++ then ATH hangs up
+```
+
+Unix names become 8.3 (`my long.name.tgz` arrives as `MY-LONG-.TGZ`), and
+received files are padded to whole 128-byte records with `^Z`, as CP/M
+stores them. Ctrl-X cancels a transfer. Timeouts count seconds from the
+CP/M 3 `T_GET` clock (BDOS 105).
 
 ## Running games
 
@@ -371,8 +401,10 @@ file list (use **Export .dsk** to keep it).
   it first. None is bundled; bring your own.
 - CP/M 2.2 only (not CP/M 3). The clock is available through CP/M 3-style
   `T_GET`/`T_SET` calls.
-- The modem reaches only the telnet BBSes in the phone book, through the
-  Worker; there is no XMODEM or other file-transfer program bundled.
+- Through the Worker, the modem reaches only the telnet BBSes in the phone
+  book; other boards need a WebSocket gateway (`ATDT wss://…`). ZMODEM
+  sends one file per run and does not offer CRC-32; YMODEM and Kermit are
+  not included.
 - Terminal profiles cover ANSI/VT100, ADM-3A and VT52; software that requires
   another terminal (Hazeltine, Televideo, Wyse, etc.) may render oddly.
 
@@ -445,7 +477,7 @@ upload it to a drive and run it.
 | `src/cpm/layout.ts` | Memory map addresses |
 | `src/cpm/machine.ts` | BDOS/BIOS traps, execution loop, clock limit |
 | `src/cpm/modem.ts` | Hayes-style modem, telnet options |
-| `src/phonebook.ts` | Telnet BBSes the modem and the relay allow |
+| `src/phonebook.ts` | Telnet BBSes the relay allows, and their WebSocket gateways |
 | `src/terminal.ts` | xterm.js + CP437 + keyboard |
 | `src/bell.ts` | VT100 bell (Web Audio) |
 | `worker/index.ts` | Cloudflare Worker: WebSocket-to-telnet relay |
@@ -509,7 +541,10 @@ An effective Sino-American team:
    bridge, Opus 5.5 added a Hayes-style modem on two I/O ports, `TERM.COM`
    in 8080 assembly, a Worker relay limited to a phone book of BBSes, and
    the VT100 bell (786 Hz for a quarter second, from MAME and the VT100
-   Technical Manual).
+   Technical Manual). Then `XMODEM.COM` and `ZMODEM.COM`, also in 8080
+   assembly and tested byte for byte against lrzsz (including corrupted
+   blocks and restarts), telnet BINARY mode, and direct dialing of BBS
+   WebSocket gateways.
 
 No GPT, Grok, or other OpenAI/xAI model was involved. Both DeepSeek and Claude
 are transformers, of course; the only *other* transformer here is the one in
@@ -528,7 +563,7 @@ A-Prompt was designed and built by Eduardo Stern. See `AUTHORS`.
 - CP/M binaries: © Digital Research, redistributed under the license granted
   by DRDOS, Inc. / Bryan Sparks, available at
   [cpm.z80.de/license.html](http://www.cpm.z80.de/license.html).
-- `HELLO`, `COLOR`, `TETRIS`, `TERM` (`.COM` and `.ASM`) and `DEMO.SUB` are original
+- `HELLO`, `COLOR`, `TETRIS`, `TERM`, `XMODEM`, `ZMODEM` (`.COM` and `.ASM`) and `DEMO.SUB` are original
   examples for this project, assembled with the bundled ASM and LOAD.
 - xterm.js, fflate and other dependencies retain their own MIT licenses.
 - `zexdoc`/`zexall` are Frank Cringle's public-domain Z80 exercisers.

@@ -19,6 +19,9 @@ jobs:
       - name: Install
         run: npm ci
 
+      - name: Install lrzsz (XMODEM/ZMODEM tests)
+        run: sudo apt-get update && sudo apt-get install -y lrzsz
+
       - name: Test
         run: npm test
 

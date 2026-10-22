@@ -5,7 +5,8 @@ import { XtermConsole } from './terminal';
 import type { TerminalType } from './terminal-translator';
 import { CpmMachine } from './cpm/machine';
 import { BUILTIN_FILES } from './assets/builtin-programs';
-import type { Dialer } from './cpm/modem';
+import type { Dialer, Link, LinkHandlers } from './cpm/modem';
+import { inPhoneBook } from './phonebook';
 import type { Disk } from './cpm/disk';
 import { CpmFile, MAX_BYTES, displayName, padExt, padName, trimName } from './cpm/disk';
 import {
@@ -59,33 +60,64 @@ const machine = new CpmMachine(con);
 
 // ---- telnet modem -----------------------------------------------------
 
-/** Dials through the Worker relay (worker/index.ts) on the same origin. */
-const relayDialer: Dialer = (host, port, handlers) => {
-  const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
-  const query = `host=${encodeURIComponent(host)}&port=${port}`;
+/** A call over one WebSocket; `isRelay` waits for the relay's CONNECT frame. */
+function wsCall(url: string, protocols: string[], isRelay: boolean, handlers: LinkHandlers): Link {
   let ws: WebSocket;
   try {
-    ws = new WebSocket(`${scheme}://${location.host}/relay?${query}`);
+    ws = new WebSocket(url, protocols);
   } catch {
     queueMicrotask(() => handlers.onClose());
     return { send: () => {}, close: () => {} };
   }
   ws.binaryType = 'arraybuffer';
+  if (!isRelay) ws.onopen = () => handlers.onOpen('DIRECT');
   ws.onmessage = (e: MessageEvent) => {
-    if (typeof e.data === 'string') {
-      if (e.data === 'CONNECT') handlers.onOpen();
-    } else {
-      handlers.onData(new Uint8Array(e.data as ArrayBuffer));
-    }
+    if (typeof e.data !== 'string') handlers.onData(new Uint8Array(e.data as ArrayBuffer));
+    else if (isRelay && e.data === 'CONNECT') handlers.onOpen();
+    else handlers.onData(Uint8Array.from(e.data, (c) => c.charCodeAt(0) & 0xff));
   };
   ws.onclose = () => handlers.onClose();
   return {
     send: (bytes) => { if (ws.readyState === WebSocket.OPEN) ws.send(bytes); },
     close: () => ws.close(),
   };
+}
+
+/** Through the Worker relay (worker/index.ts) on the same origin. */
+function relayCall(host: string, port: number, handlers: LinkHandlers): Link {
+  const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
+  const query = `host=${encodeURIComponent(host)}&port=${port}`;
+  return wsCall(`${scheme}://${location.host}/relay?${query}`, [], true, handlers);
+}
+
+/**
+ * Dials a BBS's own WebSocket gateway straight from the browser when it has
+ * one, so the call comes from the user's IP; if that fails before the call is
+ * up and the board is in the phone book, it goes through the relay instead.
+ */
+const modemDialer: Dialer = (target, handlers) => {
+  if (!target.ws) return relayCall(target.host, target.port, handlers);
+  let current: Link;
+  let opened = false;
+  let closed = false;
+  current = wsCall(target.ws, ['binary'], false, {
+    onOpen: (info) => { opened = true; handlers.onOpen(info); },
+    onData: (bytes) => handlers.onData(bytes),
+    onClose: () => {
+      if (!opened && !closed && inPhoneBook(target.host, target.port)) {
+        current = relayCall(target.host, target.port, handlers);
+      } else {
+        handlers.onClose();
+      }
+    },
+  });
+  return {
+    send: (bytes) => current.send(bytes),
+    close: () => { closed = true; current.close(); },
+  };
 };
 
-machine.modem.dialer = relayDialer;
+machine.modem.dialer = modemDialer;
 machine.modem.terminalType = () => ({ ansi: 'ANSI', adm3a: 'ADM3A', vt52: 'VT52' })[con.terminalType];
 machine.modem.windowSize = () => [con.term.cols, con.term.rows];
 const drives = machine.drives;

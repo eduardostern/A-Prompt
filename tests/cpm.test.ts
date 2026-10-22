@@ -664,7 +664,7 @@ describe('telnet modem', () => {
   /** A line that answers at once and sends `greeting`. */
   function fakeLine(machine: CpmMachine, greeting: number[], afterGreeting?: () => void) {
     const line = { sent: [] as number[], closed: false, calls: [] as string[] };
-    machine.modem.dialer = (host, port, h) => {
+    machine.modem.dialer = ({ host, port }, h) => {
       line.calls.push(`${host}:${port}`);
       queueMicrotask(() => {
         h.onOpen();
@@ -711,7 +711,7 @@ describe('telnet modem', () => {
     expect(machine.mem[0x200]).toBe(0x1a);
   });
 
-  it('TERM.COM dials, shows the BBS, answers telnet and hangs up on ^]', async () => {
+  it('TERM.COM dials, shows the BBS, answers telnet and leaves the call up on ^]', async () => {
     const { machine, con } = boot();
     const line = fakeLine(
       machine,
@@ -724,9 +724,30 @@ describe('telnet modem', () => {
     expect(con.output).toContain('ATDT1');
     expect(con.output).toContain('CONNECT');
     expect(con.output).toContain('Welcome!');
-    expect(con.output).toContain('TERM done.');
-    expect(line.sent).toEqual([255, 251, 24]); // WILL TERMINAL-TYPE
-    expect(line.closed).toBe(true);
-    expect(machine.modem.online).toBe(false);
+    expect(con.output).toContain('TERM done. The call stays up');
+    // BINARY both ways, then WILL TERMINAL-TYPE.
+    expect(line.sent).toEqual([255, 251, 0, 255, 253, 0, 255, 251, 24]);
+    expect(line.closed).toBe(false);
+    expect(machine.modem.online).toBe(true);
+
+    con.output = '';
+    con.feed('\x1d');
+    await machine.runCom(machine.disk.find(0, 'TERM    ', 'COM')!, 'TERM');
+    expect(con.output).toContain('Still connected.');
+  });
+
+  it('TERM.COM says which command to run when the BBS starts ZMODEM', async () => {
+    const zrqinit = [...'rz\r**\x18B00000000000000\r\x8a\x11'].map((c) => c.charCodeAt(0));
+    for (const [bytes, hint] of [
+      [zrqinit, 'ZMODEM download - press Ctrl-] then ZMODEM R'],
+      [[...'**\x18B0100000023be50\r\x8a'].map((c) => c.charCodeAt(0)), 'ZMODEM upload'],
+    ] as const) {
+      const { machine, con } = boot();
+      fakeLine(machine, [...bytes, ...bytes], () => con.feed('\x1d'));
+      con.feed('ATDT1\r');
+      await machine.runCom(machine.disk.find(0, 'TERM    ', 'COM')!, 'TERM');
+      expect(con.output).toContain(hint);
+      expect(con.output.split(hint).length).toBe(2); // once, not per header
+    }
   });
 });

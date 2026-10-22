@@ -1,0 +1,588 @@
+;	XMODEM - file transfer over the A-Prompt telnet modem.
+;	A-Prompt sample program. Assemble with ASM XMODEM, then LOAD XMODEM.
+;	  XMODEM R FILE.EXT   receive: CRC-16 (checksum if the sender wants
+;	                      it), 128-byte and 1K blocks
+;	  XMODEM S FILE.EXT   send 128-byte blocks, CRC-16 or checksum
+;	Dial with TERM first; Ctrl-] in TERM leaves the call up. Ctrl-X
+;	cancels. Timeouts count seconds from BDOS 105 (CP/M 3 T_GET).
+
+BDOS	EQU	5
+FCB1	EQU	5CH
+FCB2	EQU	6CH
+CONOUT	EQU	2
+PSTR	EQU	9
+OPENF	EQU	15
+CLOSEF	EQU	16
+DELF	EQU	19
+READF	EQU	20
+WRITEF	EQU	21
+MAKEF	EQU	22
+SETDMA	EQU	26
+TGET	EQU	105
+MSTAT	EQU	04H
+MDATA	EQU	05H
+RXRDY	EQU	01H
+DCD	EQU	80H
+SOH	EQU	01H
+STX	EQU	02H
+EOT	EQU	04H
+ACK	EQU	06H
+NAK	EQU	15H
+CAN	EQU	18H
+CTRLC	EQU	03H
+CR	EQU	13
+LF	EQU	10
+
+	ORG	100H
+
+START:	LXI	SP,STACK
+	LHLD	1		; BIOS CONST and CONIN for Ctrl-X
+	LXI	D,3
+	DAD	D
+	SHLD	CONST+1
+	DAD	D
+	SHLD	CONIN+1
+	CALL	MKCRC
+
+	LDA	FCB2+1		; a file name is needed
+	CPI	' '
+	JZ	USAGE
+	LXI	H,FCB2		; copy drive, name and type
+	LXI	D,FCB
+	MVI	B,12
+COPY:	MOV	A,M
+	STAX	D
+	INX	H
+	INX	D
+	DCR	B
+	JNZ	COPY
+	XRA	A		; and clear the rest
+	MVI	B,24
+CLEAR:	STAX	D
+	INX	D
+	DCR	B
+	JNZ	CLEAR
+
+	IN	MSTAT
+	ANI	DCD
+	LXI	D,SNOCAR
+	JZ	EXITM
+	LDA	FCB1+2
+	CPI	' '
+	JNZ	USAGE
+	LDA	FCB1+1
+	CPI	'R'
+	JZ	RCV
+	CPI	'S'
+	JZ	SND
+USAGE:	LXI	D,SUSAGE
+	JMP	EXITM
+
+;-----------------------------------------------------------------------
+; Receive
+
+RCV:	LXI	D,FCB
+	MVI	C,DELF
+	CALL	BDOS
+	LXI	D,FCB
+	MVI	C,MAKEF
+	CALL	BDOS
+	INR	A
+	LXI	D,SDIRF
+	JZ	EXITM
+	MVI	A,1
+	STA	FOPEN
+	STA	BLK
+	MVI	A,'C'
+	STA	MODE
+	LXI	D,SRCV
+	CALL	PRINT
+
+RINIT:	LDA	MODE		; ask for the next try: C or NAK
+	CALL	PUT
+RWAIT:	MVI	B,3		; 3 s before the first block, 10 s after
+	LDA	GOT
+	ORA	A
+	JZ	RW1
+	MVI	B,10
+RW1:	CALL	RECV
+	JC	RTMO
+	CPI	SOH
+	LXI	H,128
+	JZ	RBLK
+	CPI	STX
+	LXI	H,1024
+	JZ	RBLK
+	CPI	EOT
+	JZ	REOT
+	CPI	CAN
+	JNZ	RW1		; anything else is noise
+	MVI	B,2
+	CALL	RECV
+	JC	RWAIT
+	CPI	CAN
+	JNZ	RWAIT
+	LXI	D,SCANCL
+	JMP	FAIL
+
+RTMO:	LDA	GOT
+	ORA	A
+	JNZ	RNAK
+	LDA	TRIES
+	INR	A
+	STA	TRIES
+	CPI	20
+	LXI	D,SNOSND
+	JNC	FAIL
+	CPI	5		; four C's unanswered: try checksum
+	JNZ	RINIT
+	MVI	A,NAK
+	STA	MODE
+	JMP	RINIT
+
+RNAK:	CALL	ERRUP
+	MVI	A,NAK
+	CALL	PUT
+	JMP	RWAIT
+
+REOT:	MVI	A,ACK
+	CALL	PUT
+	CALL	CLSF
+	LXI	D,SDONE
+	JMP	EXITM
+
+; RBLK: a block header arrived; HL = data size.
+RBLK:	SHLD	SIZE
+	MVI	A,1
+	STA	GOT
+	MVI	B,2
+	CALL	RECV
+	JC	RBAD
+	STA	RNUM
+	CALL	RECV
+	JC	RBAD
+	STA	RCOMP
+	LXI	H,0
+	SHLD	CRC
+	XRA	A
+	STA	SUM
+	LXI	D,BUF
+	LHLD	SIZE
+RB1:	MVI	B,2
+	CALL	RECV
+	JC	RBAD
+	STAX	D
+	MOV	C,A
+	LDA	SUM
+	ADD	C
+	STA	SUM
+	MOV	A,C
+	CALL	CRCUP
+	INX	D
+	DCX	H
+	MOV	A,H
+	ORA	L
+	JNZ	RB1
+
+	MVI	B,2		; CRC high byte, or the checksum
+	CALL	RECV
+	JC	RBAD
+	MOV	C,A
+	LDA	MODE
+	CPI	'C'
+	JNZ	RBSUM
+	MVI	B,2
+	CALL	RECV
+	JC	RBAD
+	LXI	H,CRC
+	CMP	M
+	JNZ	RBAD
+	INX	H
+	MOV	A,C
+	CMP	M
+	JNZ	RBAD
+	JMP	RBNUM
+RBSUM:	LDA	SUM
+	CMP	C
+	JNZ	RBAD
+
+RBNUM:	LDA	RNUM		; block number and its complement
+	MOV	C,A
+	LDA	RCOMP
+	ADD	C
+	INR	A
+	JNZ	RBAD
+	LDA	BLK
+	CMP	C
+	JZ	RBOK
+	DCR	A
+	CMP	C
+	JNZ	RSYNC
+	MVI	A,ACK		; the previous block again: our ACK was lost
+	CALL	PUT
+	JMP	RWAIT
+RSYNC:	LXI	D,SSYNC
+	JMP	FAIL
+
+RBOK:	LHLD	SIZE		; write SIZE/128 records
+	DAD	H
+	MOV	B,H
+	LXI	D,BUF
+RBW:	PUSH	B
+	PUSH	D
+	MVI	C,SETDMA
+	CALL	BDOS
+	LXI	D,FCB
+	MVI	C,WRITEF
+	CALL	BDOS
+	POP	D
+	POP	B
+	ORA	A
+	JNZ	RFULL
+	LXI	H,128
+	DAD	D
+	XCHG
+	CALL	DOT
+	DCR	B
+	JNZ	RBW
+	LDA	BLK
+	INR	A
+	STA	BLK
+	XRA	A
+	STA	ERRS
+	MVI	A,ACK
+	CALL	PUT
+	JMP	RWAIT
+RFULL:	LXI	D,SFULL
+	JMP	FAIL
+
+RBAD:	MVI	B,2		; wait for the line to go quiet, then NAK
+	CALL	RECV
+	JNC	RBAD
+	JMP	RNAK
+
+;-----------------------------------------------------------------------
+; Send
+
+SND:	LXI	D,FCB
+	MVI	C,OPENF
+	CALL	BDOS
+	INR	A
+	LXI	D,SNOFIL
+	JZ	EXITM
+	MVI	A,1
+	STA	BLK
+	LXI	D,SSND
+	CALL	PRINT
+
+SST:	MVI	B,10		; wait for C (CRC) or NAK (checksum)
+	CALL	RECV
+	JC	SSTTO
+	CPI	'C'
+	JZ	SSTGO
+	CPI	NAK
+	JZ	SSTGO
+	CPI	CAN
+	JNZ	SST
+	MVI	B,2
+	CALL	RECV
+	JC	SST
+	CPI	CAN
+	JNZ	SST
+	LXI	D,SCANCL
+	JMP	FAIL
+SSTTO:	LDA	TRIES
+	INR	A
+	STA	TRIES
+	CPI	6
+	JC	SST
+	LXI	D,SNORCV
+	JMP	FAIL
+SSTGO:	STA	MODE
+
+SNEXT:	LXI	D,BUF
+	MVI	C,SETDMA
+	CALL	BDOS
+	LXI	D,FCB
+	MVI	C,READF
+	CALL	BDOS
+	ORA	A
+	JNZ	SEOT
+	XRA	A
+	STA	ERRS
+
+SBLK:	MVI	A,SOH
+	CALL	PUT
+	LDA	BLK
+	CALL	PUT
+	CMA
+	CALL	PUT
+	LXI	H,0
+	SHLD	CRC
+	XRA	A
+	STA	SUM
+	LXI	D,BUF
+	MVI	B,128
+SB1:	LDAX	D
+	CALL	PUT
+	MOV	C,A
+	LDA	SUM
+	ADD	C
+	STA	SUM
+	MOV	A,C
+	CALL	CRCUP
+	INX	D
+	DCR	B
+	JNZ	SB1
+	LDA	MODE
+	CPI	'C'
+	JNZ	SBSUM
+	LDA	CRC+1
+	CALL	PUT
+	LDA	CRC
+	CALL	PUT
+	JMP	SBACK
+SBSUM:	LDA	SUM
+	CALL	PUT
+
+SBACK:	MVI	B,10
+	CALL	RECV
+	JC	SBRTY
+	CPI	ACK
+	JZ	SBOK
+	CPI	NAK
+	JZ	SBRTY
+	CPI	'C'
+	JZ	SBRTY
+	CPI	CAN
+	JNZ	SBACK
+	MVI	B,2
+	CALL	RECV
+	JC	SBACK
+	CPI	CAN
+	JNZ	SBACK
+	LXI	D,SCANCL
+	JMP	FAIL
+SBRTY:	CALL	ERRUP
+	JMP	SBLK
+SBOK:	LDA	BLK
+	INR	A
+	STA	BLK
+	CALL	DOT
+	JMP	SNEXT
+
+SEOT:	MVI	A,EOT
+	CALL	PUT
+	MVI	B,10
+	CALL	RECV
+	JC	SE2
+	CPI	ACK
+	JZ	SEDONE
+SE2:	CALL	ERRUP
+	JMP	SEOT
+SEDONE:	LXI	D,SDONE
+	JMP	EXITM
+
+;-----------------------------------------------------------------------
+; Common
+
+; RECV: waits up to B seconds for a modem byte. A = byte with carry
+; clear, or carry set on timeout. Keeps BC, DE and HL.
+RECV:	IN	MSTAT
+	ANI	RXRDY
+	JZ	RSLOW
+	IN	MDATA
+	ORA	A
+	RET
+RSLOW:	PUSH	B
+	PUSH	D
+	PUSH	H
+	MOV	A,B
+	STA	TLEFT
+	CALL	GETSEC
+	STA	TSEC
+RS1:	LXI	H,2000		; polls between clock reads
+RS2:	IN	MSTAT
+	ANI	RXRDY
+	JNZ	RSGOT
+	DCX	H
+	MOV	A,H
+	ORA	L
+	JNZ	RS2
+	CALL	CHKABT
+	CALL	GETSEC
+	LXI	H,TSEC
+	CMP	M
+	JZ	RS1
+	MOV	M,A
+	LXI	H,TLEFT
+	DCR	M
+	JNZ	RS1
+	POP	H
+	POP	D
+	POP	B
+	STC
+	RET
+RSGOT:	IN	MDATA
+	POP	H
+	POP	D
+	POP	B
+	ORA	A
+	RET
+
+GETSEC:	MVI	C,TGET		; A = seconds (BCD)
+	LXI	D,TBUF
+	JMP	BDOS
+
+PUT:	OUT	MDATA		; keeps A
+	RET
+
+; CHKABT: Ctrl-X or Ctrl-C on the keyboard cancels the transfer.
+CHKABT:	CALL	CONST
+	ORA	A
+	RZ
+	CALL	CONIN
+	CPI	CAN
+	JZ	ABORT
+	CPI	CTRLC
+	RNZ
+ABORT:	LXI	D,SABORT
+	JMP	FAIL
+
+ERRUP:	LDA	ERRS		; ten errors in a row end it
+	INR	A
+	STA	ERRS
+	CPI	10
+	RC
+	LXI	D,SERRS
+	JMP	FAIL
+
+; DOT: one dot per 1K.
+DOT:	PUSH	B
+	PUSH	D
+	PUSH	H
+	LXI	H,DOTS
+	INR	M
+	MOV	A,M
+	ANI	7
+	JNZ	DOT1
+	MVI	E,'.'
+	MVI	C,CONOUT
+	CALL	BDOS
+DOT1:	POP	H
+	POP	D
+	POP	B
+	RET
+
+; FAIL: cancels the other end, keeps what was received, prints DE.
+FAIL:	PUSH	D
+	MVI	B,8
+FAIL1:	MVI	A,CAN
+	CALL	PUT
+	DCR	B
+	JNZ	FAIL1
+	CALL	CLSF
+	POP	D
+EXITM:	CALL	PRINT
+	JMP	0
+
+CLSF:	LDA	FOPEN
+	ORA	A
+	RZ
+	XRA	A
+	STA	FOPEN
+	LXI	D,FCB
+	MVI	C,CLOSEF
+	JMP	BDOS
+
+PRINT:	MVI	C,PSTR
+	JMP	BDOS
+
+; MKCRC: tables for CRC-16/XMODEM (polynomial 1021H), high bytes at
+; TABHI and low bytes at TABLO, one page each.
+MKCRC:	MVI	C,0
+MK1:	MOV	H,C
+	MVI	L,0
+	MVI	B,8
+MK2:	DAD	H
+	JNC	MK3
+	MOV	A,H
+	XRI	10H
+	MOV	H,A
+	MOV	A,L
+	XRI	21H
+	MOV	L,A
+MK3:	DCR	B
+	JNZ	MK2
+	MOV	E,C
+	MVI	D,TABHI SHR 8
+	MOV	A,H
+	STAX	D
+	INR	D
+	MOV	A,L
+	STAX	D
+	INR	C
+	JNZ	MK1
+	RET
+
+; CRCUP: adds A to the CRC. Keeps BC, DE and HL.
+CRCUP:	PUSH	H
+	PUSH	D
+	LHLD	CRC
+	XRA	H
+	MOV	E,A
+	MVI	D,TABHI SHR 8
+	LDAX	D
+	XRA	L
+	MOV	H,A
+	INR	D
+	LDAX	D
+	MOV	L,A
+	SHLD	CRC
+	POP	D
+	POP	H
+	RET
+
+CONST:	JMP	0		; patched at start-up
+CONIN:	JMP	0
+
+SUSAGE:	DB	'Usage: XMODEM R file  or  XMODEM S file',CR,LF
+	DB	'Dial with TERM first.',CR,LF,'$'
+SNOCAR:	DB	'No carrier: dial with TERM first.',CR,LF,'$'
+SDIRF:	DB	'Directory full.',CR,LF,'$'
+SNOFIL:	DB	'No such file.',CR,LF,'$'
+SRCV:	DB	'XMODEM receive, Ctrl-X cancels',CR,LF,'$'
+SSND:	DB	'XMODEM send, Ctrl-X cancels',CR,LF,'$'
+SDONE:	DB	CR,LF,'Transfer complete.',CR,LF,'$'
+SCANCL:	DB	CR,LF,'Cancelled by the other end.',CR,LF,'$'
+SABORT:	DB	CR,LF,'Cancelled.',CR,LF,'$'
+SNOSND:	DB	CR,LF,'No sender.',CR,LF,'$'
+SNORCV:	DB	CR,LF,'No receiver.',CR,LF,'$'
+SERRS:	DB	CR,LF,'Too many errors.',CR,LF,'$'
+SSYNC:	DB	CR,LF,'Lost block sync.',CR,LF,'$'
+SFULL:	DB	CR,LF,'Disk full.',CR,LF,'$'
+
+FOPEN:	DB	0
+BLK:	DB	0
+MODE:	DB	0
+GOT:	DB	0
+TRIES:	DB	0
+ERRS:	DB	0
+DOTS:	DB	0
+SUM:	DB	0
+RNUM:	DB	0
+RCOMP:	DB	0
+TLEFT:	DB	0
+TSEC:	DB	0
+SIZE:	DW	0
+CRC:	DW	0
+TBUF:	DS	4
+FCB:	DS	36
+	DS	64
+STACK:
+BUF:	DS	1024
+ENDB:
+TABHI	EQU	(ENDB+255) AND 0FF00H
+TABLO	EQU	TABHI+256
+
+	END	START

@@ -4,9 +4,9 @@
  * The guest sees two I/O ports (see layout.ts): a status port and a data
  * port. In command mode the modem reads AT commands from the data port and
  * answers with result codes; ATDT opens a connection through the injected
- * dialer (a WebSocket to the Worker relay in the browser, a fake in tests).
- * Online, bytes pass through with the telnet protocol handled here, so the
- * guest sees a clean 8-bit stream.
+ * dialer (in the browser a WebSocket, straight to the BBS or through the
+ * Worker relay; a fake in tests). Online, bytes pass through with the telnet
+ * protocol handled here, so the guest sees a clean 8-bit stream.
  */
 import { PHONE_BOOK } from '../phonebook';
 
@@ -17,19 +17,29 @@ export interface Link {
 }
 
 export interface LinkHandlers {
-  onOpen(): void;
+  /** The call is up; `info` is appended to CONNECT (e.g. "DIRECT"). */
+  onOpen(info?: string): void;
   onData(bytes: Uint8Array): void;
   /** The connection ended or could not be made. */
   onClose(): void;
 }
 
-export type Dialer = (host: string, port: number, handlers: LinkHandlers) => Link;
+/** Where to call: a telnet host and port, and a WebSocket address if the BBS has one. */
+export interface DialTarget {
+  host: string;
+  port: number;
+  ws?: string;
+}
+
+export type Dialer = (target: DialTarget, handlers: LinkHandlers) => Link;
 
 /** An entry in the modem's phone book (ATI lists it, ATDT1 dials entry 1). */
 export interface PhoneEntry {
   host: string;
   port: number;
   name?: string;
+  /** wss:// address the browser can dial without the relay. */
+  ws?: string;
 }
 
 /** UART status bits. */
@@ -40,6 +50,10 @@ export const MODEM_CARRIER = 0x80;
 const IAC = 255, DONT = 254, DO = 253, WONT = 252, WILL = 251, SB = 250, SE = 240;
 const OPT_BINARY = 0, OPT_ECHO = 1, OPT_SGA = 3, OPT_TTYPE = 24, OPT_NAWS = 31;
 const TTYPE_IS = 0, TTYPE_SEND = 1;
+
+/** Options we let the BBS enable on its side, and the ones we perform. */
+const HIM_OK = new Set([OPT_BINARY, OPT_ECHO, OPT_SGA]);
+const US_OK = new Set([OPT_BINARY, OPT_SGA, OPT_TTYPE, OPT_NAWS]);
 
 const RX_SIZE = 64 * 1024;
 const GUARD_MS = 1000;
@@ -79,8 +93,14 @@ export class Modem {
   private verb = 0;
   private sub: number[] = [];
   private lastWasCr = false;
-  /** Options already answered, so a server that repeats itself gets no loop. */
-  private answered = new Set<number>();
+  /** Telnet options in force on each side, and requests we sent. */
+  private him = new Set<number>();
+  private us = new Set<number>();
+  private askedHim = new Set<number>();
+  private askedUs = new Set<number>();
+  /** Options we refused, so a server that repeats itself gets no loop. */
+  private refused = new Set<number>();
+  private telnetSeen = false;
 
   // +++ escape: one second of silence, three pluses, one second of silence.
   private lastTx = 0;
@@ -102,6 +122,11 @@ export class Modem {
   /** Bytes waiting for the guest. */
   get available(): number {
     return this.rxCount;
+  }
+
+  /** True when both directions run in telnet BINARY mode (8-bit clean). */
+  get binary(): boolean {
+    return this.him.has(OPT_BINARY) && this.us.has(OPT_BINARY);
   }
 
   status(): number {
@@ -134,7 +159,7 @@ export class Modem {
   write(byte: number): void {
     byte &= 0xff;
     if (this.state === 'online') this.sendData(byte);
-    else if (this.state === 'dialing') this.abortDial();
+    else if (this.state === 'dialing') this.hangup();
     else this.commandByte(byte);
   }
 
@@ -164,10 +189,9 @@ export class Modem {
     const ch = b & 0x7f;
     if (ch === CR) {
       if (this.echo) this.push([CR, LF]);
-      const text = String.fromCharCode(...this.line).trim().toUpperCase();
       const raw = String.fromCharCode(...this.line).trim();
       this.line = [];
-      if (text.startsWith('AT')) this.execute(raw.slice(2));
+      if (raw.toUpperCase().startsWith('AT')) this.execute(raw.slice(2));
       return;
     }
     if (ch === LF) return;
@@ -178,7 +202,7 @@ export class Modem {
       }
       return;
     }
-    if (ch < 32 || this.line.length >= 80) return;
+    if (ch < 32 || this.line.length >= 120) return;
     this.line.push(ch);
     if (this.echo) this.push([ch]);
   }
@@ -202,7 +226,7 @@ export class Modem {
         case '&': i++; num(); break;
         case 'S': // S-registers: accept and ignore
           num();
-          if (cmd[i] === '=' ) { i++; num(); } else if (cmd[i] === '?') { i++; this.reply('000'); }
+          if (cmd[i] === '=') { i++; num(); } else if (cmd[i] === '?') { i++; this.reply('000'); }
           break;
         case 'O':
           num();
@@ -228,23 +252,42 @@ export class Modem {
       return;
     }
     book.forEach((e, n) => {
-      this.reply(`${String(n + 1).padStart(2)}  ${e.host}:${e.port}${e.name ? `  ${e.name}` : ''}`);
+      const direct = e.ws ? ' *' : '';
+      this.reply(`${String(n + 1).padStart(2)}  ${e.host}:${e.port}${e.name ? `  ${e.name}` : ''}${direct}`);
     });
-    this.reply('Dial with ATDT n or ATDT host:port');
+    if (book.some((e) => e.ws)) this.reply(' * connects straight from the browser');
+    this.reply('Dial with ATDT n, ATDT host:port or ATDT wss://host:port');
+  }
+
+  /** Parses the dial string: a phone book number, host[:port] or a ws(s):// URL. */
+  private target(arg: string): DialTarget | undefined {
+    const text = arg.trim().replace(/^[TP]\s*/i, '').trim();
+    const book = this.phoneBook();
+    if (/^\d{1,3}$/.test(text)) {
+      const e = book[Number(text) - 1];
+      return e ? { host: e.host, port: e.port, ws: e.ws } : undefined;
+    }
+    if (/^wss?:\/\//i.test(text)) {
+      try {
+        const url = new URL(text);
+        const port = Number(url.port) || (url.protocol === 'wss:' ? 443 : 80);
+        return { host: url.hostname.toLowerCase(), port, ws: url.href };
+      } catch {
+        return undefined;
+      }
+    }
+    const m = /^([A-Za-z0-9.-]+)(?::(\d{1,5}))?$/.exec(text);
+    if (!m) return undefined;
+    const host = m[1].toLowerCase();
+    const port = m[2] ? Number(m[2]) : 23;
+    if (port < 1 || port > 65535) return undefined;
+    const e = book.find((b) => b.host === host && b.port === port);
+    return { host, port, ws: e?.ws };
   }
 
   private dial(arg: string): void {
-    let target = arg.trim().replace(/^[TP]\s*/i, '').trim();
-    const book = this.phoneBook();
-    if (/^\d{1,3}$/.test(target) && Number(target) >= 1 && Number(target) <= book.length) {
-      const e = book[Number(target) - 1];
-      target = `${e.host}:${e.port}`;
-    }
-    const m = /^([A-Za-z0-9.-]+)(?::(\d{1,5}))?$/.exec(target);
-    if (!m) { this.result('ERROR'); return; }
-    const host = m[1].toLowerCase();
-    const port = m[2] ? Number(m[2]) : 23;
-    if (port < 1 || port > 65535) { this.result('ERROR'); return; }
+    const target = this.target(arg);
+    if (!target) { this.result('ERROR'); return; }
     if (!this.dialer) { this.result('NO DIALTONE'); return; }
 
     this.link?.close();
@@ -252,25 +295,21 @@ export class Modem {
     this.resetTelnet();
     let link: Link | undefined;
     const current = () => this.link === link;
-    link = this.dialer(host, port, {
-      onOpen: () => {
+    link = this.dialer(target, {
+      onOpen: (info) => {
         if (!current() || this.state !== 'dialing') return;
         this.state = 'online';
         this.lastTx = this.now();
-        this.result('CONNECT');
+        this.result(info ? `CONNECT ${info}` : 'CONNECT');
       },
       onData: (bytes) => {
-        if (current() && this.state === 'online') this.receive(bytes);
+        if (current() && this.state !== 'dialing') this.receive(bytes);
       },
       onClose: () => {
         if (current()) this.hangup();
       },
     });
     this.link = link;
-  }
-
-  private abortDial(): void {
-    this.hangup();
   }
 
   // ---- online ---------------------------------------------------------
@@ -288,8 +327,8 @@ export class Modem {
       this.plus = 0;
     }
     this.lastTx = now;
-    if (b === IAC) this.send([IAC, IAC]);
-    else if (b === CR) this.send([CR, 0]); // NVT: a bare CR is CR NUL
+    if (b === IAC && this.telnetSeen) this.send([IAC, IAC]);
+    else if (b === CR && this.telnetSeen && !this.us.has(OPT_BINARY)) this.send([CR, 0]); // NVT
     else this.send([b]);
   }
 
@@ -311,13 +350,14 @@ export class Modem {
       switch (this.telnet) {
         case 'data':
           if (b === IAC) { this.telnet = 'iac'; break; }
-          if (b === 0 && this.lastWasCr) { this.lastWasCr = false; break; }
+          if (b === 0 && this.lastWasCr && !this.him.has(OPT_BINARY)) { this.lastWasCr = false; break; }
           this.lastWasCr = b === CR;
           out.push(b);
           break;
         case 'iac':
-          if (b === IAC) { out.push(IAC); this.telnet = 'data'; }
-          else if (b >= WILL && b <= DONT) { this.verb = b; this.telnet = 'verb'; }
+          if (b === IAC) { out.push(IAC); this.telnet = 'data'; break; }
+          this.startTelnet();
+          if (b >= WILL && b <= DONT) { this.verb = b; this.telnet = 'verb'; }
           else if (b === SB) { this.sub = []; this.telnet = 'sb'; }
           else this.telnet = 'data'; // NOP, GA, AYT and friends
           break;
@@ -335,29 +375,55 @@ export class Modem {
           break;
       }
     }
-    this.push(out);
+    // While escaped to command mode the line stays up but its data is dropped.
+    if (this.state === 'online') this.push(out);
+  }
+
+  /** The peer speaks telnet: ask for BINARY both ways so transfers are 8-bit clean. */
+  private startTelnet(): void {
+    if (this.telnetSeen) return;
+    this.telnetSeen = true;
+    this.askedUs.add(OPT_BINARY);
+    this.askedHim.add(OPT_BINARY);
+    this.send([IAC, WILL, OPT_BINARY, IAC, DO, OPT_BINARY]);
   }
 
   private negotiate(verb: number, opt: number): void {
-    if (verb === WONT || verb === DONT) return;
-    const key = verb * 256 + opt;
-    if (this.answered.has(key)) return;
-    this.answered.add(key);
-    if (verb === WILL) {
-      const ok = opt === OPT_ECHO || opt === OPT_SGA || opt === OPT_BINARY;
-      this.send([IAC, ok ? DO : DONT, opt]);
-      return;
+    switch (verb) {
+      case WILL:
+        if (!HIM_OK.has(opt)) { this.refuse(DONT, opt); break; }
+        if (!this.him.has(opt)) {
+          this.him.add(opt);
+          if (!this.askedHim.delete(opt)) this.send([IAC, DO, opt]);
+        }
+        break;
+      case WONT:
+        this.askedHim.delete(opt);
+        if (this.him.delete(opt)) this.send([IAC, DONT, opt]);
+        break;
+      case DO:
+        if (!US_OK.has(opt)) { this.refuse(WONT, opt); break; }
+        if (!this.us.has(opt)) {
+          this.us.add(opt);
+          if (!this.askedUs.delete(opt)) this.send([IAC, WILL, opt]);
+          if (opt === OPT_NAWS) {
+            const [cols, rows] = this.windowSize();
+            this.send([IAC, SB, OPT_NAWS, ...word(cols), ...word(rows), IAC, SE]);
+          }
+        }
+        break;
+      case DONT:
+        this.askedUs.delete(opt);
+        if (this.us.delete(opt)) this.send([IAC, WONT, opt]);
+        break;
     }
-    // DO
-    if (opt === OPT_TTYPE || opt === OPT_SGA) {
-      this.send([IAC, WILL, opt]);
-    } else if (opt === OPT_NAWS) {
-      this.send([IAC, WILL, opt]);
-      const [cols, rows] = this.windowSize();
-      this.send([IAC, SB, OPT_NAWS, ...word(cols), ...word(rows), IAC, SE]);
-    } else {
-      this.send([IAC, WONT, opt]);
-    }
+  }
+
+  private refuse(answer: number, opt: number): void {
+    const key = answer * 256 + opt;
+    if (this.refused.has(key)) return;
+    this.refused.add(key);
+    this.send([IAC, answer, opt]);
   }
 
   private subnegotiate(sub: number[]): void {
@@ -371,7 +437,12 @@ export class Modem {
     this.telnet = 'data';
     this.sub = [];
     this.lastWasCr = false;
-    this.answered.clear();
+    this.him.clear();
+    this.us.clear();
+    this.askedHim.clear();
+    this.askedUs.clear();
+    this.refused.clear();
+    this.telnetSeen = false;
     this.plus = 0;
   }
 

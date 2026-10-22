@@ -190,8 +190,10 @@
             </p>
             <p class="muted">
               Run TERM to call telnet BBSes through the built-in modem
-              (ATI lists them, ATDT&nbsp;1 dials). This site's Worker relays
-              the call, to a fixed list of boards only.
+              (ATI lists them, ATDT&nbsp;1 dials), then XMODEM or ZMODEM to
+              download and upload files. Boards with a WebSocket gateway are
+              called straight from your browser; for the rest this site's
+              Worker relays the call, to a fixed list of boards only.
             </p>
             <p class="muted">
               Source, issues and releases:
@@ -210,7 +212,7 @@
                 addressing, FCB extents (S2, F_OPEN) and ^S/^C on console
                 output; the human's idea made TETRIS tune itself with CP/M 3's
                 T_GET instead of a made-up timer port. Opus 5.5 later added the
-                telnet modem, TERM and the VT100 bell. No GPT or Grok. Both are transformers — the only other
+                telnet modem, TERM, XMODEM, ZMODEM and the VT100 bell. No GPT or Grok. Both are transformers — the only other
                 one here is in the power supply.
               </p>
             </div>
