@@ -1,5 +1,5 @@
 import { Z80 } from '../z80';
-import { Disk, CpmFile, parseName } from './disk';
+import { Disk, CpmFile } from './disk';
 import { Bdos } from './bdos';
 import { Ccp } from './ccp';
 import { ConsoleIO, WarmBoot } from '../console';
@@ -173,17 +173,39 @@ export class CpmMachine {
     return lo | (hi << 8);
   }
 
-  private writeFcb(addr: number, token: string | undefined): void {
+  /**
+   * Fills a default FCB from the command tail like the CP/M 2.2 CCP's
+   * fillfcb: a name runs until a delimiter (space = _ . : ; < >), so options
+   * such as STAT's "$R/O" arrive intact; '*' pads with '?'. Returns where
+   * parsing stopped, which is where the next FCB starts.
+   */
+  private fillFcb(addr: number, text: string, pos: number): number {
     const m = this.mem;
-    m.fill(0x20, addr + 1, addr + 9);
-    m.fill(0x20, addr + 9, addr + 12);
     m[addr] = 0;
-    if (!token) return;
-    const p = parseName(token);
-    if (!p) return;
-    m[addr] = p.drive !== null ? (p.drive + 1) & 0x1f : 0;
-    for (let i = 0; i < 8; i++) m[addr + 1 + i] = p.name.charCodeAt(i);
-    for (let i = 0; i < 3; i++) m[addr + 9 + i] = p.ext.charCodeAt(i);
+    m.fill(0x20, addr + 1, addr + 12);
+    const delimiter = (c: string | undefined) => c === undefined || ' =_.:;<>'.includes(c);
+    while (text[pos] === ' ') pos++;
+    if (/[A-P]/.test(text[pos] ?? '') && text[pos + 1] === ':') {
+      m[addr] = text.charCodeAt(pos) - 64; // 1 = A:
+      pos += 2;
+    }
+    const field = (offset: number, length: number) => {
+      let i = 0;
+      while (!delimiter(text[pos])) {
+        if (text[pos] === '*') {
+          while (i < length) m[addr + offset + i++] = 0x3f;
+        } else if (i < length) {
+          m[addr + offset + i++] = text.charCodeAt(pos) & 0x7f;
+        }
+        pos++;
+      }
+    };
+    field(1, 8);
+    if (text[pos] === '.') {
+      pos++;
+      field(9, 3);
+    }
+    return pos;
   }
 
   async runCom(file: CpmFile, line: string): Promise<void> {
@@ -196,9 +218,7 @@ export class CpmMachine {
     for (let i = 0; i < tail.length; i++) m[0x0081 + i] = tail.charCodeAt(i);
     m[0x0081 + tail.length] = 0;
 
-    const tokens = tail.trim().split(/\s+/).filter(Boolean);
-    this.writeFcb(0x005c, tokens[0]);
-    this.writeFcb(0x006c, tokens[1]);
+    this.fillFcb(0x006c, tail, this.fillFcb(0x005c, tail, 0));
 
     m.set(file.data, 0x0100);
     // 0004h: current user (high nibble) and drive, restored on warm boot.
