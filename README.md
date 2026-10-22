@@ -22,8 +22,10 @@ the original Digital Research binaries distributed at
 > memory map, standard disk-image formats (including z80pack's), SUBMIT, the
 > clock and STAT. Final touches by **Claude Fable 5.1**, where the cheap
 > tokens were not up to the task: BIOS DMA alignment, S2 in FCB record
-> numbers, F_OPEN's extent, and ^S/^C on console output. DeepSeek built it,
-> Claude reviewed and fixed it. No GPT or Grok was consulted. Yes, both are transformers — the only *other* transformer
+> numbers, F_OPEN's extent, and ^S/^C on console output. The human supplied
+> the best idea of the third pass (Tetris tunes itself with CP/M 3's
+> `T_GET` instead of a made-up timer port). DeepSeek built it, Claude
+> reviewed and fixed it. No GPT or Grok was consulted. Yes, both are transformers — the only *other* transformer
 > involved is the one in the power supply.
 
 **Live demo:** <https://a-prompt.stern.workers.dev>
@@ -459,6 +461,16 @@ An effective Sino-American team:
    reset DMA, console output ignored ^S/^C, BDOS 10 read past a full buffer,
    and Z80 R/interrupt details. Each fix has a regression test that fails
    on the earlier code; `zexdoc` and `zexall` still pass.
+4. **The human had the better idea.** Fable then wrote `COLOR.COM` and
+   `TETRIS.COM` in 8080 assembly. Asked to make Tetris play at the same
+   pace at any MHz setting, it did what emulator authors do: invented a
+   millisecond timer on I/O ports E0h/E1h. Eduardo asked whether a
+   *compliant* mechanism could measure the clock at start and adjust
+   instead. It could: BDOS 105 (CP/M 3 `T_GET`) returns the seconds, so
+   the game now counts its ticks per clock second and rescales its loop,
+   staying ordinary CP/M software that also runs on real CP/M 3 and other
+   emulators. The ports were removed. Measured: 128 ticks take 8.0 s at
+   2 MHz, 8 MHz and Max.
 
 No GPT, Grok, or other OpenAI/xAI model was involved. Both DeepSeek and Claude
 are transformers, of course; the only *other* transformer here is the one in
