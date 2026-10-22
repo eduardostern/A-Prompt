@@ -71,8 +71,9 @@ keeps games with timing loops playable. **Reset** stops a runaway program
   cpmtools' `ibm-3740` and z80pack), 512K and 4MB `.dsk`/`.img` images, and
   z80pack's 4MB hard disks (`hd-tools.dsk` and friends).
   BIOS sector I/O (`SELDSK`, `SETTRK`, `SETSEC`, `SETDMA`, `READ`, `WRITE`,
-  `SECTRAN`) and a CP/M 2.2 filesystem are implemented, so tools like FORMAT
-  and DSKMAINT can work on mounted images.
+  `SECTRAN`) and a CP/M 2.2 filesystem are implemented, so raw-sector tools
+  you bring (disk editors, dump and verify utilities) work on mounted images.
+  No such tool is bundled.
 - **Clock and devices**: virtual clock via CP/M 3-style `T_GET`/`T_SET`
   (BDOS 104/105) and `DATE`; printer/serial bytes captured to downloadable
   logs (BDOS 4/5 and BIOS LIST/PUNCH).
@@ -323,14 +324,16 @@ still read correctly. BIOS sector numbers are logical (0-based, `SECTRAN` is
 1:1); the skew is applied when sectors are stored. A program that writes more
 than the image holds gets a "disk full" error instead of losing data.
 
-With an image mounted, `FORMAT`, `DSKMAINT` and other BIOS-level tools can
-read and write sectors. **Eject** converts the image back into the in-memory
+With an image mounted, BIOS-level tools from your own CP/M collection (disk
+editors such as `DU`, dump and verify utilities) can read and write sectors;
+none is bundled with A-Prompt. **Eject** converts the image back into the in-memory
 file list (use **Export .dsk** to keep it).
 
 ## Limitations
 
-- Drive A: is a host-folder drive by default. Raw-sector tools (FORMAT,
-  DSKMAINT) need a mounted image; export A: as `.dsk` and mount it first.
+- Drive A: is a host-folder drive by default. Raw-sector tools (disk
+  editors, formatters) need a mounted image; export A: as `.dsk` and mount
+  it first. None is bundled; bring your own.
 - CP/M 2.2 only (not CP/M 3). The clock is available through CP/M 3-style
   `T_GET`/`T_SET` calls; serial is output-only (captured to a log).
 - Terminal profiles cover ANSI/VT100, ADM-3A and VT52; software that requires
