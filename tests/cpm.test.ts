@@ -3,6 +3,7 @@ import { CpmMachine } from '../src/cpm/machine';
 import { BUILTIN_FILES } from '../src/assets/builtin-programs';
 import type { ConsoleIO } from '../src/console';
 import { displayName } from '../src/cpm/disk';
+import { DiskImage } from '../src/cpm/image';
 
 class TestConsole implements ConsoleIO {
   output = '';
@@ -456,5 +457,29 @@ describe('CP/M 2.2 compatibility', () => {
       0xc9,
     ], 'PROBE A.DAT');
     expect(machine.mem[0x7d]).toBe(8);
+  });
+  it('BIOS READ and WRITE use the DMA address byte for byte', async () => {
+    const { machine } = boot();
+    const image = DiskImage.blank();
+    image.writeSector(2, 0, new Uint8Array(128).fill(0xaa));
+    expect(machine.drives[1].mountImage(image.toBytes())).toBe(true);
+    await run(machine, [
+      0x1e, 0x01, 0xcd, 0x1b, 0xfe, // SELDSK B:
+      0x01, 0x02, 0x00, 0xcd, 0x1e, 0xfe, // SETTRK 2
+      0x01, 0x00, 0x00, 0xcd, 0x21, 0xfe, // SETSEC 0
+      0x01, 0x03, 0x20, 0xcd, 0x24, 0xfe, // SETDMA 2003h
+      0xcd, 0x27, 0xfe, // READ
+      0x3e, 0x55, 0x32, 0x03, 0x30, // (3003h) = 55h
+      0x01, 0x03, 0x30, 0xcd, 0x24, 0xfe, // SETDMA 3003h
+      0x01, 0x01, 0x00, 0xcd, 0x21, 0xfe, // SETSEC 1
+      0xcd, 0x2a, 0xfe, // WRITE
+      0xc9,
+    ]);
+    expect(machine.mem[0x2000]).toBe(0);
+    expect(machine.mem[0x2003]).toBe(0xaa);
+    expect(machine.mem[0x2082]).toBe(0xaa);
+    expect(machine.mem[0x2083]).toBe(0);
+    const written = machine.drives[1].image!.readSector(2, 1)!;
+    expect(written[0]).toBe(0x55);
   });
 });

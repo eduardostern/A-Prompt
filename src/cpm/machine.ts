@@ -378,15 +378,17 @@ export class CpmMachine {
         const disk = this.drives[this.biosDisk];
         const sector = disk?.image?.readSector(this.biosTrack, this.biosSector);
         if (!sector) { cpu.a = 1; break; }
-        this.mem.set(sector, this.biosDma & 0xff80);
+        // The DMA address may be any byte address; the transfer wraps at FFFFh.
+        for (let i = 0; i < 128; i++) this.mem[(this.biosDma + i) & 0xffff] = sector[i];
         cpu.a = 0;
         break;
       }
       case 14: { // WRITE
         const disk = this.drives[this.biosDisk];
         if (!disk?.image) { cpu.a = 1; break; }
-        const dma = this.biosDma & 0xff80;
-        const ok = disk.image.writeSector(this.biosTrack, this.biosSector, this.mem.subarray(dma, dma + 128));
+        const bytes = new Uint8Array(128);
+        for (let i = 0; i < 128; i++) bytes[i] = this.mem[(this.biosDma + i) & 0xffff];
+        const ok = disk.image.writeSector(this.biosTrack, this.biosSector, bytes);
         if (!ok) { cpu.a = 1; break; }
         disk.imageDirty = true;
         disk.filesDirty = false;
