@@ -5,7 +5,7 @@ import { Ccp } from './ccp';
 import { ConsoleIO, WarmBoot } from '../console';
 
 import {
-  ALV_ADDR, ALV_BYTES, BDOS_ENTRY, BIOS_BASE, BIOS_ENTRIES, CCP_STACK,
+  BDOS_ENTRY, BIOS_BASE, BIOS_ENTRIES, CCP_STACK,
   DIRBUF_ADDR, DPB_ADDR, DPH_ADDR, TRAP_BASE,
 } from './layout';
 
@@ -137,13 +137,13 @@ export class CpmMachine {
   }
 
   private buildDph(disk: Disk): number {
-    const image = disk.image!;
     const m = this.mem;
     const dpb = DPB_ADDR;
     const dph = DPH_ADDR;
     const dirbuf = DIRBUF_ADDR;
-    const alv = ALV_ADDR;
-    m.set(image.dpb(), dpb);
+    // Every drive has a DPH, so BIOS-level tools can read its format and
+    // allocation; sector READ/WRITE still need a mounted image.
+    m.set(disk.format.dpb(), dpb);
     const d = new Uint8Array(16);
     const put = (off: number, value: number) => {
       d[off] = value & 0xff;
@@ -154,10 +154,9 @@ export class CpmMachine {
     put(8, dirbuf);
     put(10, dpb);
     put(12, 0); // CSV
-    put(14, alv);
+    put(14, this.bdos.writeAllocationVector(disk));
     m.set(d, dph);
     m.fill(0, dirbuf, dirbuf + 128);
-    m.fill(0, alv, alv + Math.min(ALV_BYTES, Math.ceil((image.geometry.dsm + 1) / 8)));
     return dph;
   }
 
@@ -332,7 +331,7 @@ export class CpmMachine {
       case 9: { // SELDSK
         const index = cpu.e;
         const disk = this.drives[index];
-        if (!disk?.image) {
+        if (!disk) {
           cpu.h = 0; cpu.l = 0; cpu.a = 0;
           break;
         }

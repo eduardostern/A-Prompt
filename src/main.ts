@@ -602,7 +602,7 @@ imageInput.addEventListener('change', async () => {
   if (!file || machine.busy) return;
   const data = new Uint8Array(await file.arrayBuffer());
   if (!activeDisk().mountImage(data)) {
-    con.write('\r\n* Unsupported image. Use a raw 8" SSSD, 512K or 4MB .dsk/.img.\r\n');
+    con.write('\r\n* Unsupported image. Use a raw 8" SSSD, 512K, 4MB or z80pack 4MB hard disk .dsk/.img.\r\n');
     return;
   }
   saveAllDrives();

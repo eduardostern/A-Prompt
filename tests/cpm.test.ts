@@ -350,7 +350,7 @@ describe('CP/M 2.2 compatibility', () => {
     const big = machine.disk.find(0, 'BIG     ', 'DAT')!;
     const others = machine.disk.files.filter((f) => f !== big)
       .reduce((n, f) => n + Math.ceil(f.data.length / 2048), 0);
-    expect(big.data.length).toBe((2048 - 16 - others) * 2048);
+    expect(big.data.length).toBe((2040 - 16 - others) * 2048);
   });
 
   it('STAT reports the free space of the drive', async () => {
@@ -359,7 +359,7 @@ describe('CP/M 2.2 compatibility', () => {
     const used = machine.disk.files.reduce((n, f) => n + Math.ceil(f.data.length / 2048), 0);
     await run(machine, [], 'PROBE');
     await machine.runCom(machine.disk.find(0, 'STAT    ', 'COM')!, 'STAT');
-    expect(con.output).toContain(`A: R/W, Space: ${(2048 - 16 - used) * 2}k`);
+    expect(con.output).toContain(`A: R/W, Space: ${(2040 - 16 - used) * 2}k`);
     await machine.runCom(machine.disk.find(0, 'STAT    ', 'COM')!, 'STAT BIG.DAT');
     // 100000 bytes = 782 records in 49 2K blocks (98k) and 7 16K extents.
     expect(con.output).toMatch(/782\s+98k\s+7 R\/W A:BIG\.DAT/);
@@ -373,6 +373,44 @@ describe('CP/M 2.2 compatibility', () => {
     await machine.ccp.execute('B:');
     await machine.ccp.execute('RESET');
     expect(machine.bdos.drive).toBe(1);
+  });
+
+  /** Counts search first/next results for *.* ; `patch` is 5 bytes run first. */
+  function countSearch(patch: number[]): number[] {
+    return [
+      ...patch,
+      ...bdos(17, 0x5c), // 0105: search first
+      0x3c, 0xca, 0x20, 0x01, // 010D: INC A / JZ 0120 (A was FFh: done)
+      0x21, 0x00, 0x02, 0x34, // 0111: INC (0200h)
+      ...bdos(18, 0x5c), // 0115: search next
+      0xc3, 0x0d, 0x01, // 011D: JMP 010D
+      0xc9, // 0120
+    ];
+  }
+
+  it('directory search returns each file once unless EX is ?', async () => {
+    const { machine } = boot();
+    machine.disk.put('BIG', 'DAT', new Uint8Array(40_000)); // three 16K extents
+    machine.disk.put('PROBE', 'COM', new Uint8Array(0));
+    const files = machine.disk.list(0);
+    const entries = files.reduce((n, f) => n + Math.max(1, Math.ceil(f.data.length / 16384)), 0);
+    machine.mem[0x0200] = 0;
+    await run(machine, countSearch([0, 0, 0, 0, 0]), 'PROBE *.*');
+    expect(machine.mem[0x0200]).toBe(files.length);
+    machine.mem[0x0200] = 0;
+    await run(machine, countSearch([0x3e, 0x3f, 0x32, 0x68, 0x00]), 'PROBE *.*'); // EX = '?'
+    expect(machine.mem[0x0200]).toBe(entries);
+  });
+
+  it('directory search with ? in the drive byte covers every user area', async () => {
+    const { machine } = boot();
+    machine.disk.put('OTHER', 'TXT', new Uint8Array(10), 5);
+    machine.disk.put('PROBE', 'COM', new Uint8Array(0));
+    machine.mem[0x0200] = 0;
+    await run(machine, countSearch([0x3e, 0x3f, 0x32, 0x5c, 0x00]), 'PROBE *.*'); // drive = '?'
+    const entries = machine.disk.files.reduce((n, f) => n + Math.max(1, Math.ceil(f.data.length / 16384)), 0);
+    expect(machine.mem[0x0200]).toBe(entries);
+    expect(machine.disk.files.some((f) => f.user === 5)).toBe(true);
   });
 
   it('limits the Z80 clock when clockHz is set', async () => {

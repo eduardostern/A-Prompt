@@ -337,6 +337,15 @@ export class Bdos {
     return { first, used: next };
   }
 
+  /** Writes the drive's allocation vector (one bit per block in use) at ALV_ADDR. */
+  writeAllocationVector(disk: Disk): number {
+    const blocks = disk.format.dsm + 1;
+    const used = Math.min(blocks, this.blockLayout(disk).used);
+    this.mem.fill(0, ALV_ADDR, ALV_ADDR + Math.min(ALV_BYTES, Math.ceil(blocks / 8)));
+    for (let b = 0; b < used; b++) this.mem[ALV_ADDR + (b >> 3)] |= 0x80 >> (b & 7);
+    return ALV_ADDR;
+  }
+
   /** Writes a CP/M directory entry for a search result at the DMA address. */
   private dirEntry(ent: SearchEntry): void {
     const { file: f, fmt } = ent;
@@ -536,16 +545,25 @@ export class Bdos {
 
       case 17: { // F_SFIRST
         const n = this.fcbName(de);
-        const disk = this.target(de);
+        // '?' in the drive byte: current drive, every user area, every extent.
+        const anyUser = this.mem[de] === 0x3f;
+        const disk = anyUser ? this.currentDisk() : this.target(de);
         if (!disk) { this.result(0xff); break; }
-        const files = disk.search(this.user, n.name, n.ext);
+        const files = anyUser ? disk.searchAllUsers(n.name, n.ext) : disk.search(this.user, n.name, n.ext);
         const fmt = disk.format;
         const layout = this.blockLayout(disk);
+        // Like CP/M, only the entry holding the extent in EX/S2 matches,
+        // unless EX is '?'. Programs pass EX = 0 to see each file once.
+        const ex = this.mem[(de + 12) & 0xffff];
+        const allExtents = anyUser || ex === 0x3f;
+        const wanted = Math.floor((((this.mem[(de + 14) & 0xffff] & 0x3f) << 5) | (ex & 0x1f)) / fmt.extentsPerEntry);
         this.searchEntries = [];
         for (const f of files) {
           const { entries } = allocation(fmt, f.data.length);
           const firstBlock = layout.first.get(f) ?? fmt.reservedBlocks;
-          for (let e = 0; e < entries; e++) this.searchEntries.push({ file: f, entry: e, firstBlock, fmt });
+          for (let e = 0; e < entries; e++) {
+            if (allExtents || e === wanted) this.searchEntries.push({ file: f, entry: e, firstBlock, fmt });
+          }
         }
         this.searchIndex = 0;
         if (!this.searchEntries.length) { this.result(0xff); break; }
@@ -644,15 +662,9 @@ export class Bdos {
         this.result(0);
         break;
 
-      case 27: { // DRV_ALLOCVEC: one bit per block, set when in use
-        const disk = this.currentDisk();
-        const blocks = disk.format.dsm + 1;
-        const used = Math.min(blocks, this.blockLayout(disk).used);
-        this.mem.fill(0, ALV_ADDR, ALV_ADDR + Math.min(ALV_BYTES, Math.ceil(blocks / 8)));
-        for (let b = 0; b < used; b++) this.mem[ALV_ADDR + (b >> 3)] |= 0x80 >> (b & 7);
-        this.resultHL(ALV_ADDR);
+      case 27: // DRV_ALLOCVEC
+        this.resultHL(this.writeAllocationVector(this.currentDisk()));
         break;
-      }
 
       case 28: // DRV_SETRO
         this.result(0);

@@ -30,25 +30,27 @@ export interface DriveFormat {
 }
 
 /**
- * Format reported for drives without an image: 2K blocks, 4 MB, 1024
- * directory entries, like a CP/M 2.2 hard disk.  DSM > 255 means 16-bit
- * block pointers and EXM = 0 (one 16K extent per entry).
+ * Format reported for drives without an image: the z80pack 4MB hard disk
+ * (2K blocks, 2040 blocks, 1024 directory entries). DSM > 255 means 16-bit
+ * block pointers and EXM = 0 (one 16K extent per entry). Matching a real
+ * format keeps period tools' arithmetic right (SURVEY, for one, miscounts a
+ * 2048-block map).
  */
 export const FILE_DRIVE_FORMAT: DriveFormat = {
   blockSize: 2048,
   extentsPerEntry: 1,
   wide: true,
-  dsm: 2047,
+  dsm: 2039,
   reservedBlocks: 16,
   dirEntries: 1024,
   dpb: () => [
-    0x40, 0x00, // SPT = 64
+    0x80, 0x00, // SPT = 128
     0x04, 0x0f, 0x00, // BSH = 4, BLM = 15, EXM = 0
-    0xff, 0x07, // DSM = 2047
+    0xf7, 0x07, // DSM = 2039
     0xff, 0x03, // DRM = 1023
     0xff, 0xff, // AL0/AL1: 16 directory blocks
     0x00, 0x00, // CKS
-    0x02, 0x00, // OFF
+    0x00, 0x00, // OFF
   ],
 };
 
@@ -231,6 +233,13 @@ export class Disk {
 
   search(user: number, name: string, ext: string): CpmFile[] {
     return this.list(user).filter((f) => matches(f, name, ext));
+  }
+
+  /** Matching files in every user area (search with '?' in the drive byte). */
+  searchAllUsers(name: string, ext: string): CpmFile[] {
+    return this.files
+      .filter((f) => matches(f, name, ext))
+      .sort((a, b) => a.user - b.user || (a.name + a.ext).localeCompare(b.name + b.ext));
   }
 
   create(user: number, name: string, ext: string): CpmFile | { error: 'full' } {

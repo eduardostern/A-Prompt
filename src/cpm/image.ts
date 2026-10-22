@@ -23,8 +23,6 @@ const DIR_ENTRY = 32;
 const RECORD = 128;
 /** A logical extent: the 128 records one EX value counts. */
 const LOGICAL_EXTENT = 16 * 1024;
-/** Block pointers per directory entry (8-bit pointers, since DSM < 256). */
-const POINTERS = 16;
 
 /** IBM 3740 8" SSSD skew (factor 6): logical sector -> physical, 0-based. */
 const SKEW_3740: readonly number[] = [
@@ -47,10 +45,22 @@ const G4M: Geometry = {
   dsm: 255, drm: 511, off: 2, al0: 0x80, al1: 0,
 };
 
+/**
+ * z80pack's 4MB hard disk (cpmsim drives I: and J:, e.g. hd-tools.dsk):
+ * 255 tracks of 128 sectors, 2K blocks, no system tracks, no skew. DSM > 255
+ * means 16-bit block pointers, eight per directory entry. DPB as in
+ * z80pack's cpmsim/srccpm2/bios.asm (HDBLK).
+ */
+const GZ80PACK_HD: Geometry = {
+  spt: 128, tracks: 255, blockSize: 2048, bsh: 4, blm: 15, exm: 0,
+  dsm: 2039, drm: 1023, off: 0, al0: 0xff, al1: 0xff,
+};
+
 export function geometryForSize(size: number): Geometry | null {
   if (size === G8.tracks * G8.spt * 128) return { ...G8 };
   if (size === G512.tracks * G512.spt * 128) return { ...G512 };
   if (size === G4M.tracks * G4M.spt * 128) return { ...G4M };
+  if (size === GZ80PACK_HD.tracks * GZ80PACK_HD.spt * 128) return { ...GZ80PACK_HD };
   // Generic 8" image: 128-byte sectors, 26 per track.
   if (size % (26 * 128) !== 0) return null;
   const tracks = size / (26 * 128);
@@ -111,10 +121,31 @@ export class DiskImage implements DriveFormat {
 
   /** Logical extents (16K each) held by one directory entry: EXM + 1. */
   get extentsPerEntry(): number {
-    return Math.max(1, (POINTERS * this.geometry.blockSize) / LOGICAL_EXTENT);
+    return Math.max(1, (this.pointers * this.geometry.blockSize) / LOGICAL_EXTENT);
   }
 
-  readonly wide = false;
+  /** DSM > 255: block pointers are 16-bit. */
+  get wide(): boolean {
+    return this.geometry.dsm > 255;
+  }
+
+  /** Block pointers per directory entry: sixteen 8-bit or eight 16-bit. */
+  get pointers(): number {
+    return this.wide ? 8 : 16;
+  }
+
+  private readPointer(buf: Uint8Array, entry: number, j: number): number {
+    return this.wide ? buf[entry + 16 + j * 2] | (buf[entry + 17 + j * 2] << 8) : buf[entry + 16 + j];
+  }
+
+  private writePointer(buf: Uint8Array, entry: number, j: number, block: number): void {
+    if (this.wide) {
+      buf[entry + 16 + j * 2] = block & 0xff;
+      buf[entry + 17 + j * 2] = block >> 8;
+    } else {
+      buf[entry + 16 + j] = block;
+    }
+  }
 
   get dsm(): number {
     return this.geometry.dsm;
@@ -251,7 +282,7 @@ export class DiskImage implements DriveFormat {
       }
       if (ok && user <= 15) {
         if (d[e + 12] > 0x1f || d[e + 15] > 0x80) ok = false;
-        for (let j = 0; j < POINTERS && ok; j++) if (d[e + 16 + j] > this.geometry.dsm) ok = false;
+        for (let j = 0; j < this.pointers && ok; j++) if (this.readPointer(d, e, j) > this.geometry.dsm) ok = false;
       }
       if (!ok) bad++;
     }
@@ -292,7 +323,7 @@ export class DiskImage implements DriveFormat {
       const extent = ((d[base + 14] & 0x3f) << 5) | (d[base + 12] & 0x1f);
       // Keep zero pointers in place: they are holes in a sparse file.
       const blocks: number[] = [];
-      for (let j = 0; j < POINTERS; j++) blocks.push(d[base + 16 + j]);
+      for (let j = 0; j < this.pointers; j++) blocks.push(this.readPointer(d, base, j));
       group.entries.push({ extent, rc: Math.min(128, d[base + 15]), blocks });
     }
 
@@ -362,7 +393,7 @@ export class DiskImage implements DriveFormat {
         const last = records ? Math.floor((records - 1) / 128) : 0;
         const extent = k * per + last;
         const need = Math.ceil(length / bls);
-        if (need > POINTERS || nextFree + need > this.blockCount) return false;
+        if (need > this.pointers || nextFree + need > this.blockCount) return false;
 
         const e = entryAt(slot);
         buf[e] = file.user & 0x0f;
@@ -379,7 +410,7 @@ export class DiskImage implements DriveFormat {
           const block = nextFree++;
           const at = start + i * bls;
           this.writeBlock(buf, block, file.data.subarray(at, Math.min(at + bls, start + length)));
-          buf[e + 16 + i] = block;
+          this.writePointer(buf, e, i, block);
         }
         slot++;
       }

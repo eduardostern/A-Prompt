@@ -225,6 +225,40 @@ describe('standard CP/M disk formats', () => {
     expect([...huge.data.subarray(0, 700000)]).toEqual([...data]);
   });
 
+  it('mounts z80pack 4MB hard disks with 16-bit block pointers', () => {
+    const size = 255 * 128 * SECTOR;
+    const raw = new Uint8Array(size);
+    // z80pack HDBLK: no system tracks, so the directory starts at byte 0.
+    raw.fill(0xe5, 0, 1024 * 32);
+    raw.fill(0, 0, 32);
+    raw.set([...'HD      TXT'].map((c) => c.charCodeAt(0)), 1);
+    raw[15] = 1; // one record
+    raw[16] = 1144 & 0xff; // first pointer, 16-bit little endian
+    raw[17] = 1144 >> 8;
+    raw.set(new TextEncoder().encode('BLOCK 1144'), 1144 * 2048);
+    const image = DiskImage.fromBytes(raw)!;
+    expect(image).toBeTruthy();
+    expect(image.dpb()).toEqual([128, 0, 4, 15, 0, 2039 & 0xff, 2039 >> 8, 0xff, 0x03, 0xff, 0xff, 0, 0, 0, 0]);
+    const [hd] = image.extractFiles();
+    expect(displayName(hd)).toBe('HD.TXT');
+    expect(new TextDecoder().decode(hd.data.subarray(0, 10))).toBe('BLOCK 1144');
+  });
+
+  it('writes z80pack hard disks with blocks above 255', () => {
+    const image = DiskImage.fromBytes(new Uint8Array(255 * 128 * SECTOR))!;
+    image.format();
+    const first = bytesOf(600_000, 3); // 293 blocks, so the next file starts past 255
+    const second = bytesOf(5000, 4);
+    expect(image.rebuild([{ ...file('A', 'BIN', []), data: first }, { ...file('B', 'BIN', []), data: second }])).toBe(true);
+    // Entries 0-36 hold A (37 x 16K); entry 37 is B, first block 16 + 293 = 309.
+    const e = 37 * 32;
+    expect(String.fromCharCode(image.data[e + 1])).toBe('B');
+    expect(image.data[e + 16] | (image.data[e + 17] << 8)).toBe(309);
+    const files = DiskImage.fromBytes(image.toBytes())!.extractFiles();
+    expect([...files.find((f) => f.name.trim() === 'A')!.data.subarray(0, 600_000)]).toEqual([...first]);
+    expect([...files.find((f) => f.name.trim() === 'B')!.data.subarray(0, 5000)]).toEqual([...second]);
+  });
+
   it('leaves the image unchanged when a rebuild does not fit', () => {
     const image = DiskImage.blank();
     expect(image.rebuild([file('KEEP', 'TXT', [1, 2, 3])])).toBe(true);
