@@ -482,4 +482,55 @@ describe('CP/M 2.2 compatibility', () => {
     const written = machine.drives[1].image!.readSector(2, 1)!;
     expect(written[0]).toBe(0x55);
   });
+  it('keeps S2 in the record number for files beyond 512K', async () => {
+    const { machine } = boot();
+    const big = new Uint8Array(1024 * 1024);
+    big[5000 * 128] = 0x42;
+    big[5001 * 128] = 0x43;
+    machine.disk.put('BIG', 'DAT', big);
+    await run(machine, [
+      ...bdos(15, 0x5c),
+      0x21, 0x88, 0x13, 0x22, 0x7d, 0x00, 0xaf, 0x32, 0x7f, 0x00, // r0-r2 = 5000
+      ...bdos(33, 0x5c), // random read
+      0x3a, 0x80, 0x00, 0x32, 0x00, 0x20, // (2000h) = first byte
+      ...bdos(20, 0x5c), // sequential read rereads record 5000
+      ...bdos(20, 0x5c), // then 5001
+      0x3a, 0x80, 0x00, 0x32, 0x01, 0x20,
+      ...bdos(36, 0x5c), // random record from the FCB position
+      0xc9,
+    ], 'PROBE BIG.DAT');
+    const fcb = 0x5c;
+    expect(machine.mem[0x2000]).toBe(0x42);
+    expect(machine.mem[0x2001]).toBe(0x43);
+    // After reading 5001 the FCB sits on 5002: EX 7, S2 1, CR 10.
+    expect(machine.mem[fcb + 12]).toBe(7);
+    expect(machine.mem[fcb + 14]).toBe(1);
+    expect(machine.mem[fcb + 32]).toBe(10);
+    expect(machine.mem[fcb + 33] | (machine.mem[fcb + 34] << 8)).toBe(5002);
+  });
+
+  it('F_OPEN keeps the requested extent and CR', async () => {
+    const { machine } = boot();
+    const data = new Uint8Array(40 * 1024);
+    data[0] = 0x11;
+    data[16384 + 3 * 128] = 0x77;
+    machine.disk.put('BIG', 'DAT', data);
+    await run(machine, [
+      0x3e, 0x01, 0x32, 0x68, 0x00, // EX = 1
+      0x3e, 0x03, 0x32, 0x7c, 0x00, // CR = 3
+      ...bdos(15, 0x5c),
+      0x32, 0x00, 0x20, // (2000h) = open result
+      0x3a, 0x6b, 0x00, 0x32, 0x01, 0x20, // (2001h) = RC
+      ...bdos(20, 0x5c),
+      0x3a, 0x80, 0x00, 0x32, 0x02, 0x20, // (2002h) = data
+      0x3e, 0x05, 0x32, 0x68, 0x00, // EX = 5: no such extent
+      ...bdos(15, 0x5c),
+      0x32, 0x03, 0x20,
+      0xc9,
+    ], 'PROBE BIG.DAT');
+    expect(machine.mem[0x2000]).toBe(0);
+    expect(machine.mem[0x2001]).toBe(128); // extent 1 is full: 40K spans extents 0-2
+    expect(machine.mem[0x2002]).toBe(0x77);
+    expect(machine.mem[0x2003]).toBe(0xff);
+  });
 });

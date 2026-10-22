@@ -250,16 +250,31 @@ export class Bdos {
     return entry;
   }
 
-  private setOpenState(fcb: number, f: CpmFile, disk: Disk): void {
+  /** Logical extent (S2:EX) named by the FCB. */
+  private fcbExtent(fcb: number): number {
+    return ((this.mem[(fcb + 14) & 0xffff] & 0x3f) << 5) | (this.mem[(fcb + 12) & 0xffff] & 0x1f);
+  }
+
+  /**
+   * Fills the FCB after open/make the way CP/M 2.2 does: EX and S2 stay as
+   * the program set them (the directory was matched on them), CR is not
+   * touched (byte 32 is not part of the directory entry), RC describes the
+   * requested logical extent and the allocation bytes cover that extent.
+   * Returns false when an opened file has no such extent.
+   */
+  private setOpenState(fcb: number, f: CpmFile, disk: Disk, create = false): boolean {
+    const m = this.mem;
+    const extent = this.fcbExtent(fcb);
+    const rc = Disk.extentRecords(f, extent);
+    if (!create && extent > 0 && rc === 0) return false;
     this.open.set(fcb, { file: f, disk });
-    this.mem[(fcb + 12) & 0xffff] = 0; // EX
-    this.mem[(fcb + 13) & 0xffff] = 0; // S1
-    this.mem[(fcb + 14) & 0xffff] = 0; // S2
-    this.mem[(fcb + 15) & 0xffff] = Math.min(128, Disk.extentRecords(f, 0));
-    this.mem[(fcb + 32) & 0xffff] = 0; // CR
-    for (let i = 0; i < 16; i++) this.mem[(fcb + 16 + i) & 0xffff] = 0;
-    const blocks = Math.min(16, Math.ceil(f.data.length / 16384));
-    for (let i = 0; i < blocks; i++) this.mem[(fcb + 16 + i) & 0xffff] = (1 + i) & 0xff;
+    m[(fcb + 13) & 0xffff] = 0; // S1
+    m[(fcb + 14) & 0xffff] &= 0x3f; // S2 without the write flag
+    m[(fcb + 15) & 0xffff] = rc;
+    for (let i = 0; i < 16; i++) m[(fcb + 16 + i) & 0xffff] = 0;
+    const blocks = Math.min(16, Math.ceil((rc * 128) / 1024));
+    for (let i = 0; i < blocks; i++) m[(fcb + 16 + i) & 0xffff] = (1 + i) & 0xff;
+    return true;
   }
 
   private readRecord(f: CpmFile, record: number): boolean {
@@ -304,15 +319,18 @@ export class Bdos {
     return true;
   }
 
+  /** Record number named by the FCB: S2 (bits 12-17), EX (bits 7-11), CR. */
   private seqRecord(fcb: number): number {
-    return (this.mem[(fcb + 12) & 0xffff] * 128) + this.mem[(fcb + 32) & 0xffff];
+    return (this.fcbExtent(fcb) << 7) | (this.mem[(fcb + 32) & 0xffff] & 0x7f);
   }
 
   private setSeqRecord(fcb: number, record: number): void {
-    this.mem[(fcb + 12) & 0xffff] = (record >> 7) & 0xff;
+    const extent = record >> 7;
+    this.mem[(fcb + 12) & 0xffff] = extent & 0x1f;
+    this.mem[(fcb + 14) & 0xffff] = (extent >> 5) & 0x3f;
     this.mem[(fcb + 32) & 0xffff] = record & 0x7f;
     const f = this.open.get(fcb)?.file;
-    this.mem[(fcb + 15) & 0xffff] = f ? Math.min(128, Disk.extentRecords(f, record >> 7)) : 0;
+    this.mem[(fcb + 15) & 0xffff] = f ? Disk.extentRecords(f, extent) : 0;
   }
 
   private randomRecord(fcb: number): number {
@@ -533,8 +551,7 @@ export class Bdos {
         const disk = this.target(de);
         if (!disk) { this.result(0xff); break; }
         const f = disk.find(this.user, n.name, n.ext);
-        if (!f) { this.result(0xff); break; }
-        this.setOpenState(de, f, disk);
+        if (!f || !this.setOpenState(de, f, disk)) { this.result(0xff); break; }
         this.result(0);
         break;
       }
@@ -625,7 +642,7 @@ export class Bdos {
         if (!disk.find(this.user, n.name, n.ext) && !disk.canStore(null, 0)) { this.result(0xff); break; }
         const f = disk.create(this.user, n.name, n.ext);
         if ('error' in f) { this.result(0xff); break; }
-        this.setOpenState(de, f, disk);
+        this.setOpenState(de, f, disk, true);
         this.result(0);
         break;
       }
