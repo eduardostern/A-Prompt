@@ -129,3 +129,58 @@ describe('Z80 T-states', () => {
     expect(cpu.cycles).toBe(21 + 21 + 16);
   });
 });
+
+describe('Z80 R register and interrupts', () => {
+  it('R advances once per opcode fetch, including prefix bytes', () => {
+    const cpu = new Z80();
+    cpu.mem.set([0xdd, 0x21, 0x00, 0x00, 0xed, 0x5f], 0); // LD IX,0 ; LD A,R
+    cpu.step();
+    cpu.step();
+    expect(cpu.a).toBe(4);
+    cpu.pc = 0;
+    cpu.mem.set([0xdd, 0xcb, 0x00, 0x46, 0xed, 0x5f], 0); // BIT 0,(IX+0) ; LD A,R
+    cpu.step();
+    cpu.step();
+    expect(cpu.a).toBe(4 + 2 + 2);
+  });
+
+  it('IM 0 lets the RST push the return address once', () => {
+    const cpu = new Z80();
+    cpu.iff1 = cpu.iff2 = 1;
+    cpu.sp = 0x100;
+    cpu.pc = 0x1234;
+    cpu.interrupt(0xff); // RST 38h
+    expect(cpu.sp).toBe(0xfe);
+    expect(cpu.pc).toBe(0x38);
+    expect(cpu.mem[0xfe] | (cpu.mem[0xff] << 8)).toBe(0x1234);
+    expect(cpu.iff1).toBe(0);
+  });
+
+  it('IM 2 uses the data byte as supplied, odd values included', () => {
+    const cpu = new Z80();
+    cpu.iff1 = cpu.iff2 = 1;
+    cpu.im = 2;
+    cpu.i = 0x80;
+    cpu.sp = 0x100;
+    cpu.pc = 0x1234;
+    cpu.mem[0x8001] = 0x78;
+    cpu.mem[0x8002] = 0x56;
+    cpu.interrupt(0x01);
+    expect(cpu.pc).toBe(0x5678);
+    expect(cpu.sp).toBe(0xfe);
+  });
+
+  it('reads a DDCB displacement that wraps past FFFFh', () => {
+    const cpu = new Z80();
+    cpu.pc = 0xfffe;
+    cpu.ix = 0x2000;
+    cpu.mem[0xfffe] = 0xdd; // BIT 0,(IX+5): prefixes at FFFEh/FFFFh,
+    cpu.mem[0xffff] = 0xcb; // displacement at 0000h, opcode at 0001h
+    cpu.mem[0x0000] = 0x05;
+    cpu.mem[0x0001] = 0x46;
+    cpu.mem[0x2005] = 0x01;
+    cpu.step();
+    expect(cpu.f & ZF).toBe(0);
+    expect(cpu.pc & 0xffff).toBe(0x0002);
+  });
+});

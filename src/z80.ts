@@ -390,9 +390,14 @@ export class Z80 {
 
   // ---- main loop --------------------------------------------------------
 
-  step(): void {
-    if (this.halted) { this.cycles += 4; return; }
+  /** R counts opcode fetches: once per instruction and once per prefix byte. */
+  private bumpR(): void {
     this.r = (this.r & 0x80) | ((this.r + 1) & 0x7f);
+  }
+
+  step(): void {
+    if (this.halted) { this.bumpR(); this.cycles += 4; return; }
+    this.bumpR();
     const start = this.pc & 0xffff;
     const op = this.mem[start];
     this.pc = (start + 1) & 0xffff;
@@ -466,7 +471,7 @@ export class Z80 {
       case 0x0d: this.c = this.dec8(this.c); break;
       case 0x0e: this.c = this.imm8(); break;
       case 0x0f: { const c = this.a & 1; this.a = ((this.a >> 1) | (c << 7)) & 0xff; this.f = (this.f & (SF | ZF | PF)) | (this.a & (XF | YF)) | (c ? CF : 0); break; }
-      case 0x10: { const d = (this.mem[this.pc++] << 24) >> 24; this.b = (this.b - 1) & 0xff; if (this.b !== 0) this.pc = (this.pc + d) & 0xffff; break; }
+      case 0x10: { const d = (this.mem[this.pc++ & 0xffff] << 24) >> 24; this.b = (this.b - 1) & 0xff; if (this.b !== 0) this.pc = (this.pc + d) & 0xffff; break; }
       case 0x11: this.de = this.imm16(); break;
       case 0x12: this.mem[this.de] = this.a; break;
       case 0x13: this.de = (this.de + 1) & 0xffff; break;
@@ -474,7 +479,7 @@ export class Z80 {
       case 0x15: this.d = this.dec8(this.d); break;
       case 0x16: this.d = this.imm8(); break;
       case 0x17: { const c = (this.a >> 7) & 1; this.a = ((this.a << 1) | ((this.f & CF) ? 1 : 0)) & 0xff; this.f = (this.f & (SF | ZF | PF)) | (this.a & (XF | YF)) | (c ? CF : 0); break; }
-      case 0x18: { const d = (this.mem[this.pc++] << 24) >> 24; this.pc = (this.pc + d) & 0xffff; break; }
+      case 0x18: { const d = (this.mem[this.pc++ & 0xffff] << 24) >> 24; this.pc = (this.pc + d) & 0xffff; break; }
       case 0x19: this.addHL(this.de); break;
       case 0x1a: this.a = this.mem[this.de]; break;
       case 0x1b: this.de = (this.de - 1) & 0xffff; break;
@@ -482,7 +487,7 @@ export class Z80 {
       case 0x1d: this.e = this.dec8(this.e); break;
       case 0x1e: this.e = this.imm8(); break;
       case 0x1f: { const c = this.a & 1; this.a = ((this.a >> 1) | ((this.f & CF) ? 0x80 : 0)) & 0xff; this.f = (this.f & (SF | ZF | PF)) | (this.a & (XF | YF)) | (c ? CF : 0); break; }
-      case 0x20: { const d = (this.mem[this.pc++] << 24) >> 24; if (!(this.f & ZF)) this.pc = (this.pc + d) & 0xffff; break; }
+      case 0x20: { const d = (this.mem[this.pc++ & 0xffff] << 24) >> 24; if (!(this.f & ZF)) this.pc = (this.pc + d) & 0xffff; break; }
       case 0x21: this.hl = this.imm16(); break;
       case 0x22: this.wr16(this.imm16(), this.hl); break;
       case 0x23: this.hl = (this.hl + 1) & 0xffff; break;
@@ -490,7 +495,7 @@ export class Z80 {
       case 0x25: this.h = this.dec8(this.h); break;
       case 0x26: this.h = this.imm8(); break;
       case 0x27: this.daa(); break;
-      case 0x28: { const d = (this.mem[this.pc++] << 24) >> 24; if (this.f & ZF) this.pc = (this.pc + d) & 0xffff; break; }
+      case 0x28: { const d = (this.mem[this.pc++ & 0xffff] << 24) >> 24; if (this.f & ZF) this.pc = (this.pc + d) & 0xffff; break; }
       case 0x29: this.addHL(this.hl); break;
       case 0x2a: this.hl = this.rd16(this.imm16()); break;
       case 0x2b: this.hl = (this.hl - 1) & 0xffff; break;
@@ -498,7 +503,7 @@ export class Z80 {
       case 0x2d: this.l = this.dec8(this.l); break;
       case 0x2e: this.l = this.imm8(); break;
       case 0x2f: this.a = (~this.a) & 0xff; this.f |= NF | HF; this.f = (this.f & ~(XF | YF)) | (this.a & (XF | YF)); break;
-      case 0x30: { const d = (this.mem[this.pc++] << 24) >> 24; if (!(this.f & CF)) this.pc = (this.pc + d) & 0xffff; break; }
+      case 0x30: { const d = (this.mem[this.pc++ & 0xffff] << 24) >> 24; if (!(this.f & CF)) this.pc = (this.pc + d) & 0xffff; break; }
       case 0x31: this.sp = this.imm16(); break;
       case 0x32: this.mem[this.imm16()] = this.a; break;
       case 0x33: this.sp = (this.sp + 1) & 0xffff; break;
@@ -506,7 +511,7 @@ export class Z80 {
       case 0x35: this.mem[this.hl] = this.dec8(this.mem[this.hl]); break;
       case 0x36: this.mem[this.hl] = this.imm8(); break;
       case 0x37: this.f = (this.f & (SF | ZF | PF)) | (this.a & (XF | YF)) | CF; break;
-      case 0x38: { const d = (this.mem[this.pc++] << 24) >> 24; if (this.f & CF) this.pc = (this.pc + d) & 0xffff; break; }
+      case 0x38: { const d = (this.mem[this.pc++ & 0xffff] << 24) >> 24; if (this.f & CF) this.pc = (this.pc + d) & 0xffff; break; }
       case 0x39: this.addHL(this.sp); break;
       case 0x3a: this.a = this.mem[this.imm16()]; break;
       case 0x3b: this.sp = (this.sp - 1) & 0xffff; break;
@@ -586,6 +591,7 @@ export class Z80 {
   }
 
   private execCb(): void {
+    this.bumpR();
     const op = this.mem[this.pc++ & 0xffff];
     const reg = op & 7;
     const group = op >> 6;
@@ -609,10 +615,11 @@ export class Z80 {
   }
 
   private execIndexed(idx: 1 | 2): void {
+    this.bumpR();
     const op = this.mem[this.pc++ & 0xffff];
     if (op === 0xdd || op === 0xfd) { this.execIndexed(op === 0xdd ? 1 : 2); return; }
     if (op === 0xcb) {
-      const disp = (this.mem[this.pc++] << 24) >> 24;
+      const disp = (this.mem[this.pc++ & 0xffff] << 24) >> 24;
       const cb = this.mem[this.pc++ & 0xffff];
       const addr = (this.getHL(idx) + disp) & 0xffff;
       const reg = cb & 7;
@@ -690,6 +697,7 @@ export class Z80 {
   }
 
   private execEd(): void {
+    this.bumpR();
     const op = this.mem[this.pc++ & 0xffff];
     switch (op) {
       case 0x40: case 0x48: case 0x50: case 0x58: case 0x60: case 0x68: case 0x70: case 0x78: {
@@ -854,11 +862,16 @@ export class Z80 {
     if (!this.iff1) return;
     this.iff1 = this.iff2 = 0;
     this.halted = false;
-    this.push16(this.pc);
-    if (this.im === 0) { this.execBase(data); }
-    else if (this.im === 1) { this.pc = 0x0038; }
-    else {
-      const addr = (this.i << 8) | (data & 0xfe);
+    if (this.im === 0) {
+      // The data byte is executed as an instruction; an RST pushes PC itself.
+      this.execBase(data);
+    } else if (this.im === 1) {
+      this.push16(this.pc);
+      this.pc = 0x0038;
+    } else {
+      // The vector is I:data as supplied; the Z80 does not clear bit 0.
+      this.push16(this.pc);
+      const addr = (this.i << 8) | (data & 0xff);
       this.pc = this.mem[addr] | (this.mem[(addr + 1) & 0xffff] << 8);
     }
   }
