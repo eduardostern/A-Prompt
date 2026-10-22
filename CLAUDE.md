@@ -58,6 +58,15 @@ user/drive; the CCP restores both from it after each program.
 - BDOS 6 with E=FFh must not block; `ConsoleIO.hasInput()` peeks without
   consuming, `pollByte()` consumes.
 - Random read/write leave the FCB on the same record (no `+1`).
+- The FCB record number is S2:EX:CR (`((S2 & 3Fh) << 12) | (EX << 7) | CR`);
+  EX never exceeds 31, the overflow goes to S2.
+- F_OPEN keeps the EX/S2 the program asked for and never touches CR; it
+  fails with FFh when the file has no such extent. RC describes that extent.
+- BIOS READ/WRITE copy to the exact DMA address; it need not be aligned.
+- BDOS console output (1, 2, 6, 9) pauses on ^S and warm boots on ^C typed
+  during the pause, via `ConsoleIO.peekByte()`; BIOS CONOUT is raw.
+- BDOS 10 returns when the buffer is full, on CR or on LF; ^C reboots only
+  at the start of the line.
 - DMA resets to `0080h` and open files are forgotten before each program.
 - Search first (BDOS 17) returns only the extent named in EX/S2 unless EX is
   `?`; `?` in the drive byte searches all user areas.

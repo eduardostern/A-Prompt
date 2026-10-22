@@ -55,8 +55,9 @@ keeps games with timing loops playable. **Reset** stops a runaway program
 - **Z80 CPU**: documented and undocumented instructions (SLL, IXH/IXL, DDCB,
   ED block ops, etc.). Passes `zexdoc` and `zexall` (all groups OK). T-states
   follow the Zilog tables and drive the clock limit.
-- **CP/M 2.2**: console, FCBs, sequential and random files, directory search,
-  rename, attributes, user areas 0–15, DMA and DPB.
+- **CP/M 2.2**: console (with `^S` pause and `^C` abort during output),
+  FCBs with the full S2:EX:CR record numbering, sequential and random files,
+  directory search, rename, attributes, user areas 0–15, DMA and DPB.
 - **CCP**: `DIR`, `ERA`, `TYPE`, `REN`, `USER`, `SAVE`, `CLS`, `HELP`, drive
   selection (A:–D:), and `.COM` execution with command tail and default FCBs.
 - **Real `SUBMIT`**: the CCP consumes `$$$.SUB` one record at a time, also
