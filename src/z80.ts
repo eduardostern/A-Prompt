@@ -108,6 +108,10 @@ export class Z80 {
   /** Rough T-state counter, for host pacing only. */
   cycles = 0;
 
+  /** I/O port handlers; the default is an empty bus (FFh) and a sink. */
+  portIn: (port: number) => number = () => 0xff;
+  portOut: (port: number, value: number) => void = () => {};
+
   reset(): void {
     this.a = this.f = 0;
     this.b = this.c = this.d = this.e = this.h = this.l = 0;
@@ -540,7 +544,7 @@ export class Z80 {
       case 0xd0: if (!(this.f & CF)) this.pc = this.pop16(); break;
       case 0xd1: this.de = this.pop16(); break;
       case 0xd2: { const a = this.imm16(); if (!(this.f & CF)) this.pc = a; break; }
-      case 0xd3: this.imm8(); break; // OUT (n),A
+      case 0xd3: this.portOut((this.a << 8) | this.imm8(), this.a); break; // OUT (n),A
       case 0xd4: { const a = this.imm16(); if (!(this.f & CF)) { this.push16(this.pc); this.pc = a; } break; }
       case 0xd5: this.push16(this.de); break;
       case 0xd6: this.sub8(this.imm8(), false); break;
@@ -548,7 +552,7 @@ export class Z80 {
       case 0xd8: if (this.f & CF) this.pc = this.pop16(); break;
       case 0xd9: { const b = this.b, c = this.c, d = this.d, e = this.e, h = this.h, l = this.l; this.b = this.b2; this.c = this.c2; this.d = this.d2; this.e = this.e2; this.h = this.h2; this.l = this.l2; this.b2 = b; this.c2 = c; this.d2 = d; this.e2 = e; this.h2 = h; this.l2 = l; break; }
       case 0xda: { const a = this.imm16(); if (this.f & CF) this.pc = a; break; }
-      case 0xdb: this.imm8(); this.a = 0xff; break; // IN A,(n)
+      case 0xdb: this.a = this.portIn((this.a << 8) | this.imm8()) & 0xff; break; // IN A,(n)
       case 0xdc: { const a = this.imm16(); if (this.f & CF) { this.push16(this.pc); this.pc = a; } break; }
       case 0xdd: this.execIndexed(1); break;
       case 0xde: this.sub8(this.imm8(), true); break;
@@ -701,13 +705,14 @@ export class Z80 {
     const op = this.mem[this.pc++ & 0xffff];
     switch (op) {
       case 0x40: case 0x48: case 0x50: case 0x58: case 0x60: case 0x68: case 0x70: case 0x78: {
-        const v = 0xff;
+        const v = this.portIn(this.bc) & 0xff;
         this.f = (this.f & CF) | SZP[v];
         if (op !== 0x70) this.setR((op >> 3) & 7, v);
         break;
       }
       case 0x41: case 0x49: case 0x51: case 0x59: case 0x61: case 0x69: case 0x71: case 0x79:
-        break; // OUT (C),r - no devices
+        this.portOut(this.bc, op === 0x71 ? 0 : this.getR((op >> 3) & 7)); // OUT (C),r
+        break;
       case 0x42: this.sbcHL(this.bc); break;
       case 0x4a: this.adcHL(this.bc); break;
       case 0x52: this.sbcHL(this.de); break;
@@ -808,7 +813,7 @@ export class Z80 {
         break;
       }
       case 0xa2: case 0xaa: { // INI / IND
-        const v = 0xff;
+        const v = this.portIn(this.bc) & 0xff;
         this.mem[this.hl] = v;
         const step = op === 0xa2 ? 1 : -1;
         this.hl = (this.hl + step) & 0xffff;
@@ -818,6 +823,7 @@ export class Z80 {
       }
       case 0xa3: case 0xab: { // OUTI / OUTD
         const v = this.mem[this.hl];
+        this.portOut(((this.b - 1) & 0xff) << 8 | this.c, v);
         const step = op === 0xa3 ? 1 : -1;
         this.hl = (this.hl + step) & 0xffff;
         this.b = (this.b - 1) & 0xff;
@@ -825,7 +831,7 @@ export class Z80 {
         break;
       }
       case 0xb2: case 0xba: { // INIR / INDR
-        const v = 0xff;
+        const v = this.portIn(this.bc) & 0xff;
         this.mem[this.hl] = v;
         const step = op === 0xb2 ? 1 : -1;
         this.hl = (this.hl + step) & 0xffff;
@@ -836,6 +842,7 @@ export class Z80 {
       }
       case 0xb3: case 0xbb: { // OTIR / OTDR
         const v = this.mem[this.hl];
+        this.portOut(((this.b - 1) & 0xff) << 8 | this.c, v);
         const step = op === 0xb3 ? 1 : -1;
         this.hl = (this.hl + step) & 0xffff;
         this.b = (this.b - 1) & 0xff;

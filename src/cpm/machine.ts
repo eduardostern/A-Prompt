@@ -41,6 +41,8 @@ export class CpmMachine {
   sleepFn: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms));
   /** Target Z80 clock in Hz; 0 runs as fast as the host allows. */
   clockHz = 0;
+  /** Wall-clock milliseconds since the epoch for the BDOS clock; tests substitute a fake. */
+  now: () => number = () => Date.now();
 
   private warm = false;
   private stopped = false;
@@ -52,7 +54,7 @@ export class CpmMachine {
   constructor(readonly console: ConsoleIO) {
     this.mem = this.cpu.mem;
     this.initMemory();
-    this.bdos = new Bdos(this.cpu, this.drives, console, () => { this.warm = true; });
+    this.bdos = new Bdos(this.cpu, this.drives, console, () => { this.warm = true; }, () => this.now());
     this.ccp = new Ccp(this);
   }
 

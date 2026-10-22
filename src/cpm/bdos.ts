@@ -39,6 +39,7 @@ export class Bdos {
     public readonly drives: Disk[],
     private con: ConsoleIO,
     private onWarmBoot: () => void,
+    private now: () => number = () => Date.now(),
   ) {}
 
   reset(): void {
@@ -67,7 +68,7 @@ export class Bdos {
   clockStamp(): number[] {
     if (this.rtcStamp) return [...this.rtcStamp];
     const epoch = Date.UTC(1978, 0, 1);
-    const now = new Date();
+    const now = new Date(this.now());
     const localDay = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
     const days = Math.floor((localDay - epoch) / 86_400_000);
     return [days & 0xff, (days >> 8) & 0xff, now.getHours(), now.getMinutes()];
@@ -813,10 +814,11 @@ export class Bdos {
         break;
       }
 
-      case 105: { // T_GET (CP/M 3 style extension)
+      case 105: { // T_GET (CP/M 3 style extension): A = seconds in BCD
         const stamp = this.clockStamp();
         for (let i = 0; i < 4; i++) this.mem[(de + i) & 0xffff] = stamp[i];
-        this.result(0);
+        const s = new Date(this.now()).getSeconds();
+        this.result((Math.floor(s / 10) << 4) | (s % 10));
         break;
       }
 

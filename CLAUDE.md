@@ -48,6 +48,12 @@ exerciser after any change to `src/z80.ts`.
 | `src/storage.ts` | localStorage encoding (deflate + base64, v3 records) |
 | `src/main.ts` | UI wiring, persistence, uploads, toolbar |
 
+## I/O ports
+
+No devices: every port reads FFh and OUT is a sink. The Z80 core exposes
+`portIn`/`portOut` hooks should one be needed. Programs that need real
+time use BDOS 105 (T_GET), which returns the seconds in A like CP/M 3.
+
 ## Memory map
 
 TPA `0100h–FBFFh`; BDOS entry `FC06h` (at `0006h`); CCP stack below
@@ -102,7 +108,10 @@ user/drive; the CCP restores both from it after each program.
   `TITLE`/`PAGE` are pseudo-ops, not usable as labels. `;` inside a string
   is safest as a `3BH` byte. `scripts/assemble.ts` runs ASM and LOAD inside
   the emulator; a line starting with an error letter means a failed assembly.
-- TETRIS times its ticks with a busy loop tuned for the 4 MHz default clock.
+- TETRIS paces itself with a busy loop that it re-tunes every clock second
+  from the T_GET seconds to 16 ticks a second (so any MHz setting plays
+  the same); without the call it keeps the 4 MHz default. Tests replace
+  `machine.now` (ms since the epoch, feeds the BDOS clock) with a fake.
 
 ## Testing tips
 

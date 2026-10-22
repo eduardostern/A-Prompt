@@ -75,6 +75,8 @@ keeps games with timing loops playable. **Reset** stops a runaway program
   you bring (disk editors, dump and verify utilities) work on mounted images.
   No such tool is bundled.
 - **Clock and devices**: virtual clock via CP/M 3-style `T_GET`/`T_SET`
+  (`T_GET` returns the seconds in A as on CP/M 3; TETRIS re-tunes its
+  timing loop against it, so it plays at the same pace at any MHz setting)
   (BDOS 104/105) and `DATE`; printer/serial bytes captured to downloadable
   logs (BDOS 4/5 and BIOS LIST/PUNCH).
 - **Upload/download** from the drive panel; drives A:–D: (4 MB each, laid

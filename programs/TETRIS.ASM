@@ -7,8 +7,12 @@
 ;	       space                      hard drop
 ;	       P pause                    Q quit
 ;
-;	The fall timer is a busy loop tuned for a 4 MHz Z80, as period
-;	games were; the clock menu changes the pace.
+;	Ticks come from a busy loop, as in period games, but the loop is
+;	re-tuned every second against the clock: BDOS 105 (CP/M 3 T_GET)
+;	returns the seconds, the game counts its ticks per second and
+;	rescales the loop to 16 ticks a second. So the pace is the same at
+;	any clock setting, and follows a change of speed within a second
+;	or two. Without the call (plain CP/M 2.2) the 4 MHz default stays.
 
 BDOS	EQU	5
 CONOUT	EQU	2
@@ -28,18 +32,23 @@ BLEFT	EQU	26		; screen column of board column 0 (2 chars per cell)
 PANEL	EQU	52		; column of the side panel (text ends by column 75)
 PROW	EQU	10		; first row of the next-piece preview
 STATUS	EQU	23		; row for messages
-DELAY	EQU	8300		; busy-loop count, about 50 ms at 4 MHz
+TGET	EQU	105		; CP/M 3 get time: A = seconds
+TPSGOAL	EQU	16		; ticks per second (62.5 ms per tick)
+DELAY0	EQU	1008		; loop units per tick at 4 MHz (248 T each)
 
 	ORG	100H
 
 START:	LXI	SP,STACK
+	CALL	RDSEC		; the first change of the seconds is the
+	STA	LASTSEC		; start of the first full second counted
 	LXI	D,SINIT		; clear screen, hide cursor
 	CALL	PRINT
 	CALL	DRAWFR
 	CALL	DRAWPN
 	LXI	D,SPRESS
 	CALL	STATMSG
-WAIT0:	CALL	RND		; stir the seed while waiting
+WAIT0:	CALL	WAIT		; ticking here calibrates the loop early
+	CALL	RND		; stir the seed while waiting
 	CALL	POLL
 	ORA	A
 	JZ	WAIT0
@@ -118,7 +127,8 @@ FALLOK:	CALL	DRAW
 
 GAMEOV:	LXI	D,SOVER
 	CALL	STATMSG
-WAITOV:	CALL	RND
+WAITOV:	CALL	WAIT
+	CALL	RND
 	CALL	POLL
 	ORA	A
 	JZ	WAITOV
@@ -260,7 +270,8 @@ KDREND:	LDA	PY
 
 KPAUSE:	LXI	D,SPAUSE
 	CALL	STATMSG
-KPWAIT:	CALL	RND
+KPWAIT:	CALL	WAIT
+	CALL	RND
 	CALL	POLL
 	ORA	A
 	JZ	KPWAIT
@@ -831,12 +842,87 @@ PRINT:	PUSH	B
 	POP	B
 	RET
 
-; WAIT: one tick of busy waiting.
-WAIT:	LXI	B,DELAY
-WAITLP:	DCX	B
+; WAIT: one game tick: DELAYU units of a 248 T-state loop, then TICKCTL.
+WAIT:	LHLD	DELAYU
+	MOV	B,H
+	MOV	C,L
+WAITLP:	MVI	A,16
+WAITIN:	DCR	A
+	JNZ	WAITIN
+	DCX	B
 	MOV	A,B
 	ORA	C
 	JNZ	WAITLP
+
+; TICKCTL: count ticks per clock second; at each change of the seconds
+; rescale DELAYU by ticks/TPSGOAL so the next second has TPSGOAL ticks.
+TICKCTL:
+	LDA	TPS
+	INR	A
+	JZ	TCFULL		; saturate at 255
+	STA	TPS
+TCFULL:	CALL	RDSEC
+	MOV	B,A
+	LDA	LASTSEC
+	CMP	B
+	RZ			; still the same second
+	MOV	A,B
+	STA	LASTSEC
+	LDA	ARMED		; the first edge only starts the count
+	ORA	A
+	JNZ	ADJUST
+	MVI	A,1
+	STA	ARMED
+	XRA	A
+	STA	TPS
+	RET
+ADJUST:	LDA	TPS
+	MOV	B,A
+	XRA	A
+	STA	TPS
+	LHLD	DELAYU
+	XCHG			; DE = DELAYU
+	LXI	H,0
+	MVI	C,0		; C:HL = DELAYU * ticks
+MULLP:	DAD	D
+	JNC	MULNC
+	INR	C
+MULNC:	DCR	B
+	JNZ	MULLP
+	MVI	B,4		; divide by TPSGOAL = 16
+SHRLP:	ORA	A
+	MOV	A,C
+	RAR
+	MOV	C,A
+	MOV	A,H
+	RAR
+	MOV	H,A
+	MOV	A,L
+	RAR
+	MOV	L,A
+	DCR	B
+	JNZ	SHRLP
+	MOV	A,C
+	ORA	A
+	JZ	ADJFIT
+	LXI	H,0FFFFH	; too large for 16 bits
+ADJFIT:	MOV	A,H
+	ORA	L
+	JNZ	ADJSET
+	INX	H		; never zero
+ADJSET:	SHLD	DELAYU
+	RET
+
+; RDSEC: A = seconds from the clock (CP/M 3 T_GET), 0 where there is none.
+RDSEC:	PUSH	B
+	PUSH	D
+	PUSH	H
+	MVI	C,TGET
+	LXI	D,TBUF
+	CALL	BDOS
+	POP	H
+	POP	D
+	POP	B
 	RET
 
 ; RND: step the 16-bit generator.  RNDPC: A = random piece 0..6.
@@ -882,8 +968,8 @@ COLORS:	DB	46,43,45,42,41,44,47
 ; Points for 1..4 lines (index 0 unused), times level.
 SCTAB:	DW	0,40,100,300,1200
 
-; Ticks per row for levels 1..10.
-SPDTAB:	DB	16,14,12,10,8,6,5,4,3,2
+; Ticks per row for levels 1..10 (16 ticks = one second).
+SPDTAB:	DB	13,11,10,8,6,5,4,3,2,2
 
 ; Side panel: row, then a $-string; 0 ends.
 PANELTX:
@@ -928,6 +1014,11 @@ LEVEL:	DS	1
 OVER:	DS	1
 CLEARED: DS	1
 CURROW:	DS	1
+TPS:	DB	0		; ticks counted in the current clock second
+LASTSEC: DB	0
+ARMED:	DB	0		; 1 once a seconds edge has been seen
+DELAYU:	DW	DELAY0		; loop units per tick, re-tuned every second
+TBUF:	DS	4		; T_GET date/time buffer
 SCORE:	DS	2
 LINES:	DS	2
 NEXTLV:	DS	2

@@ -610,11 +610,47 @@ describe('CP/M 2.2 compatibility', () => {
       if (polls === 100) return 0x71;
       return undefined;
     };
+    let reads = 0;
+    machine.now = () => 1_700_000_000_000 + Math.floor(reads++ / 16) * 1000; // 16 ticks a second
     await machine.runCom(tetris, 'TETRIS');
     expect(con.output).toContain('T E T R I S');
     expect(con.output).toContain('\x1b[5;59H00004'); // Lines field after the tetris
     expect(con.output).toContain('Thanks for playing.');
     expect(machine.mem.subarray(board + 160, board + 200).every((v) => v === 0)).toBe(false); // piece shifted down
     expect(machine.mem.subarray(board, board + 160).every((v) => v === 0)).toBe(true);
+  });
+
+  it('T_GET returns the seconds in A as BCD, like CP/M 3', async () => {
+    const { machine } = boot();
+    machine.now = () => Date.UTC(2026, 9, 21, 12, 34, 56) + new Date().getTimezoneOffset() * 60_000;
+    await run(machine, [...bdos(105, 0x2000), 0x32, 0x10, 0x20, 0xc9]);
+    expect(machine.mem[0x2010]).toBe(0x56);
+  });
+
+  it('TETRIS re-tunes its tick loop to 16 ticks per clock second', async () => {
+    // Each run plays 80 ticks; the fake clock advances one second every
+    // `perSecond` ticks, so the game sees that many ticks per second and
+    // scales its delay loop by perSecond/16 at every edge.
+    async function play(perSecond: number): Promise<number> {
+      const { machine, con } = boot();
+      const tetris = machine.disk.find(0, 'TETRIS  ', 'COM')!;
+      let reads = 0;
+      machine.now = () => 1_700_000_000_000 + Math.floor(reads++ / perSecond) * 1000;
+      let polls = 0;
+      con.pollByte = () => {
+        polls++;
+        if (polls === 2) return 0x20;
+        if (polls === 80) return 0x71;
+        return undefined;
+      };
+      const before = machine.cpu.cycles;
+      await machine.runCom(tetris, 'TETRIS');
+      return machine.cpu.cycles - before;
+    }
+    const slow = await play(8); // only 8 ticks a second: the loop must halve
+    const right = await play(16);
+    const fast = await play(32); // 32 ticks a second: the loop must double
+    expect(slow).toBeLessThan(right * 0.7);
+    expect(fast).toBeGreaterThan(right * 1.4);
   });
 });

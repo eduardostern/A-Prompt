@@ -184,3 +184,31 @@ describe('Z80 R register and interrupts', () => {
     expect(cpu.pc & 0xffff).toBe(0x0002);
   });
 });
+
+describe('Z80 I/O ports', () => {
+  it('IN and OUT go through the port hooks with the full 16-bit address', () => {
+    const cpu = new Z80();
+    const reads: number[] = [];
+    const writes: Array<[number, number]> = [];
+    cpu.portIn = (port) => { reads.push(port); return 0x42; };
+    cpu.portOut = (port, value) => { writes.push([port, value]); };
+    cpu.a = 0x12;
+    cpu.mem.set([0xdb, 0xe0, 0xd3, 0x34, 0xed, 0x40, 0xed, 0x79], 0);
+    cpu.bc = 0x5678;
+    cpu.step(); // IN A,(E0h): address 12E0h
+    expect(cpu.a).toBe(0x42);
+    cpu.step(); // OUT (34h),A: address 4234h, value 42h
+    cpu.step(); // IN B,(C)
+    expect(cpu.b).toBe(0x42);
+    cpu.step(); // OUT (C),A
+    expect(reads).toEqual([0x12e0, 0x5678]);
+    expect(writes).toEqual([[0x4234, 0x42], [0x4278, 0x42]]);
+  });
+
+  it('reads an empty bus as FFh by default', () => {
+    const cpu = new Z80();
+    cpu.mem.set([0xdb, 0x00], 0);
+    cpu.step();
+    expect(cpu.a).toBe(0xff);
+  });
+});
