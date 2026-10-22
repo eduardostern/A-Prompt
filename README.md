@@ -307,9 +307,13 @@ sectors. The image panel supports 8" SSSD (77 tracks × 26 sectors), 512K and
 
 z80pack's 4MB hard disk images (4,177,920 bytes: 255 tracks × 128 sectors,
 2K blocks, 1024 directory entries, 16-bit block pointers — z80pack's `HDBLK`)
-also mount, e.g. `hd-tools.dsk` from `cpmsim/disks/library`. A 4MB image may
-be too large for the browser's `localStorage`; if saving fails it stays in
-memory for the session only, so use **Export .dsk** to keep changes.
+also mount, e.g. `hd-tools.dsk` from `cpmsim/disks/library`.
+
+Mounted images are saved in the browser compressed (deflate), so a 4MB disk
+fits in `localStorage`: `hd-tools.dsk`, 2.4MB of programs, takes about 1.5M
+characters instead of 5.6M. If a disk still does not fit (a full disk of
+already-compressed archives, say), the drive panel says so; the session keeps
+working and **Export .dsk** saves a copy.
 Images exported by earlier A-Prompt versions (unskewed) are recognised and
 still read correctly. BIOS sector numbers are logical (0-based, `SECTRAN` is
 1:1); the skew is applied when sectors are stored. A program that writes more

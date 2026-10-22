@@ -1017,3 +1017,12 @@ body { overflow: hidden; }
 @media (max-width: 360px) {
   .panel-title { display: none; }
 }
+
+/* Shown when a drive no longer fits in localStorage. */
+.save-warning {
+  margin: 8px 0 10px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--amber);
+}
+.save-warning b { color: var(--text); font-weight: 600; }

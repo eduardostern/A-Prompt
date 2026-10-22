@@ -7,6 +7,7 @@ import { CpmMachine } from './cpm/machine';
 import { BUILTIN_FILES } from './assets/builtin-programs';
 import type { Disk } from './cpm/disk';
 import { CpmFile, MAX_BYTES, displayName, padExt, padName, trimName } from './cpm/disk';
+import { b64ToBytes, bytesToB64, decodeImage, encodeImage, sameBytes } from './storage';
 
 const LS_PREFIX = 'a-prompt.drive.';
 const LEGACY_LS_KEY = 'a-prompt.drive.v1';
@@ -20,22 +21,6 @@ const letterFor = (index: number): string => String.fromCharCode(65 + index);
 const driveKey = (index: number): string => `${LS_PREFIX}${letterFor(index)}.v2`;
 
 // ---- helpers ----------------------------------------------------------
-
-function b64ToBytes(b64: string): Uint8Array {
-  const binary = atob(b64);
-  const out = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
-  return out;
-}
-
-function bytesToB64(data: Uint8Array): string {
-  let s = '';
-  const chunk = 0x8000;
-  for (let i = 0; i < data.length; i += chunk) {
-    s += String.fromCharCode(...data.subarray(i, i + chunk));
-  }
-  return btoa(s);
-}
 
 function formatSize(n: number): string {
   if (n < 1024) return `${n} B`;
@@ -91,7 +76,22 @@ interface StoredFile {
 interface StoredDrive {
   v?: number;
   files?: StoredFile[];
+  /** v2: plain base64 image. */
   image?: string;
+  /** v3: deflated base64 image (see storage.ts). */
+  imagez?: string;
+  size?: number;
+}
+
+/** Image bytes last written to localStorage, per drive, to skip unchanged saves. */
+const savedImages: (Uint8Array | undefined)[] = [];
+/** Drives whose last save did not fit in localStorage. */
+const saveFailed: boolean[] = [];
+
+function setSaveFailed(index: number, failed: boolean): void {
+  if (saveFailed[index] === failed) return;
+  saveFailed[index] = failed;
+  if (index === activeDrive) renderSaveWarning();
 }
 
 function saveDrive(index: number): void {
@@ -100,12 +100,17 @@ function saveDrive(index: number): void {
     try {
       disk.syncImage();
       const bytes = disk.exportImage();
-      if (bytes) localStorage.setItem(driveKey(index), JSON.stringify({ v: 2, image: bytesToB64(bytes) }));
+      if (!bytes || sameBytes(savedImages[index], bytes)) return;
+      localStorage.setItem(driveKey(index), JSON.stringify(encodeImage(bytes)));
+      savedImages[index] = bytes;
+      setSaveFailed(index, false);
     } catch {
-      /* quota exceeded: keep the image in memory */
+      // Quota exceeded: the image stays in memory; the last good save is kept.
+      setSaveFailed(index, true);
     }
     return;
   }
+  savedImages[index] = undefined;
   const files: StoredFile[] = [];
   for (const f of disk.files) {
     if (trimName(f.name) === '$$$') continue; // transient SUBMIT queue
@@ -117,8 +122,9 @@ function saveDrive(index: number): void {
   try {
     if (files.length) localStorage.setItem(driveKey(index), JSON.stringify({ v: 2, files }));
     else localStorage.removeItem(driveKey(index));
+    setSaveFailed(index, false);
   } catch {
-    /* quota exceeded: keep running in memory */
+    setSaveFailed(index, true); // quota exceeded: keep running in memory
   }
 }
 
@@ -136,9 +142,12 @@ function restoreDrive(index: number): void {
     }
     if (!raw) return;
     const parsed = JSON.parse(raw) as StoredDrive;
-    if (typeof parsed.image === 'string') {
-      const bytes = b64ToBytes(parsed.image);
-      if (bytes.length <= MAX_BYTES * 2) drives[index].mountImage(bytes);
+    if (typeof parsed.imagez === 'string' || typeof parsed.image === 'string') {
+      const bytes = decodeImage(parsed);
+      if (bytes && bytes.length <= MAX_BYTES * 2 && drives[index].mountImage(bytes)) {
+        // v3 already holds these bytes; a v2 record is upgraded on the next save.
+        if (parsed.v === 3) savedImages[index] = drives[index].exportImage() ?? undefined;
+      }
       return;
     }
     if (!parsed.files) return;
@@ -170,6 +179,11 @@ const clockSelect = el<HTMLSelectElement>('clock-speed');
 const speedEl = el('speed');
 const resetMachine = el<HTMLButtonElement>('reset-machine');
 const usage = el('usage');
+const saveWarning = el('save-warning');
+
+function renderSaveWarning(): void {
+  saveWarning.hidden = !saveFailed[activeDrive];
+}
 const usageBar = el<HTMLDivElement>('usage-bar');
 const led = el('led');
 const statusText = el('status-text');
@@ -339,6 +353,7 @@ function renderFiles(): void {
   const used = disk.usedBytes();
   usage.textContent = `${formatSize(used)} / ${formatSize(MAX_BYTES)}`;
   usageBar.style.width = `${Math.min(100, (used / MAX_BYTES) * 100).toFixed(1)}%`;
+  renderSaveWarning();
   fileList.scrollTop = 0;
   scheduleSave();
 }
