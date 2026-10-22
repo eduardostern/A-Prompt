@@ -13,13 +13,16 @@ FCBs and user areas, a console, and a CCP with the classic commands. It runs
 the original Digital Research binaries distributed at
 [cpm.z80.de](http://www.cpm.z80.de).
 
-> **No Former-OpenAI tokens were harmed during the creation of this piece of software.**
+> **An effective Sino-American team.** (A few former-OpenAI tokens were harmed after all.)
 >
 > Built with [OpenCode](https://opencode.ai) + DeepSeek V4.1 Flash for **under $1**
 > in model tokens — the build run cost **$0.92**, other experiments excluded.
-> No Claude, GPT, or Grok was consulted, prompted, or otherwise awakened. Yes,
-> DeepSeek is a transformer too — the only *other* transformer involved is the
-> one in the power supply.
+> Then [Claude Code](https://claude.com/claude-code) with Claude Opus 5.5 had to
+> review it and fix what DeepSeek left behind: CP/M 2.2 compatibility bugs, the
+> memory map, standard disk-image formats (including z80pack's), SUBMIT, the
+> clock and STAT. DeepSeek built it, Claude reviewed and fixed it. No GPT or
+> Grok was consulted. Yes, both are transformers — the only *other* transformer
+> involved is the one in the power supply.
 
 **Live demo:** <https://a-prompt.stern.workers.dev>
 
@@ -62,16 +65,17 @@ keeps games with timing loops playable. **Reset** stops a runaway program
 - **Terminal profiles**: ANSI/VT100, ADM-3A and VT52 escape-sequence
   translation, with CP437 character mapping.
 - **Disk images**: mount/export raw 8" SSSD (77×26, standard skew 6 as in
-  cpmtools' `ibm-3740` and z80pack), 512K and 4MB `.dsk`/`.img` images.
+  cpmtools' `ibm-3740` and z80pack), 512K and 4MB `.dsk`/`.img` images, and
+  z80pack's 4MB hard disks (`hd-tools.dsk` and friends).
   BIOS sector I/O (`SELDSK`, `SETTRK`, `SETSEC`, `SETDMA`, `READ`, `WRITE`,
   `SECTRAN`) and a CP/M 2.2 filesystem are implemented, so tools like FORMAT
   and DSKMAINT can work on mounted images.
 - **Clock and devices**: virtual clock via CP/M 3-style `T_GET`/`T_SET`
   (BDOS 104/105) and `DATE`; printer/serial bytes captured to downloadable
   logs (BDOS 4/5 and BIOS LIST/PUNCH).
-- **Upload/download** from the drive panel; drives A:–D: (4 MB each, 2K
-  blocks, 1024 directory entries, so `STAT` shows real free space) are
-  persisted in the browser's `localStorage`.
+- **Upload/download** from the drive panel; drives A:–D: (4 MB each, laid
+  out like a z80pack hard disk: 2K blocks, 1024 directory entries, so `STAT`
+  shows real free space) are persisted in the browser's `localStorage`.
 
 Bundled programs: **PIP**, **STAT**, **DDT**, **ED**, **ASM**, **LOAD**,
 **SUBMIT**, **DUMP**, **HELLO.COM**, **INPUT.COM**, plus **DEMO.SUB** and
@@ -300,6 +304,12 @@ sectors. The image panel supports 8" SSSD (77 tracks × 26 sectors), 512K and
 
 8" images use the standard IBM 3740 layout (skew 6), so disks from cpmtools
 (`ibm-3740`) and z80pack mount directly, and exported images open there.
+
+z80pack's 4MB hard disk images (4,177,920 bytes: 255 tracks × 128 sectors,
+2K blocks, 1024 directory entries, 16-bit block pointers — z80pack's `HDBLK`)
+also mount, e.g. `hd-tools.dsk` from `cpmsim/disks/library`. A 4MB image may
+be too large for the browser's `localStorage`; if saving fails it stays in
+memory for the session only, so use **Export .dsk** to keep changes.
 Images exported by earlier A-Prompt versions (unskewed) are recognised and
 still read correctly. BIOS sector numbers are logical (0-based, `SECTRAN` is
 1:1); the skew is applied when sectors are stored. A program that writes more
@@ -407,12 +417,28 @@ domain) and live in `tests/fixtures/`.
 
 ## AI provenance
 
-This project was built with [OpenCode](https://opencode.ai) and **DeepSeek
-V4.1 Flash** for **less than $1 in model tokens** — the build run cost
-**$0.92**; other experiments are not included. No Claude, GPT, Grok, or other
-OpenAI/Anthropic/xAI model was involved. DeepSeek is itself a transformer, of
-course; the only *other* transformer here is the one in the power supply. No
-former-OpenAI tokens were harmed.
+An effective Sino-American team:
+
+1. **Build — DeepSeek.** The emulator was written with
+   [OpenCode](https://opencode.ai) and **DeepSeek V4.1 Flash** for **less than
+   $1 in model tokens** — the build run cost **$0.92**; other experiments are
+   not included. It got the hard part right: the Z80 core passes `zexdoc` and
+   `zexall`.
+2. **Review and fixes — Claude.** [Claude Code](https://claude.com/claude-code)
+   with **Claude Opus 5.5** then had to review it and fix what it found, each
+   fix with a regression test:
+   - BDOS: non-blocking console polling, status checks that swallowed keys,
+     DMA and open files carried between programs, random-record position, a
+     stale open-file cache, directory search returning every extent.
+   - Memory map: the BIOS sat inside the TPA, so programs could overwrite it.
+   - Disk images: standard 8" skew, correct EXM, files over 512K, z80pack 4MB
+     hard disks, and no data loss when an image fills up.
+   - SUBMIT across drives and user areas, STAT free space, the drive prompt
+     after a disk reset, and a real Z80 clock limit with Zilog T-states.
+
+No GPT, Grok, or other OpenAI/xAI model was involved. Both DeepSeek and Claude
+are transformers, of course; the only *other* transformer here is the one in
+the power supply. A few former-OpenAI tokens were harmed after all.
 
 ## Author
 
