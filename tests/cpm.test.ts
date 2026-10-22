@@ -413,6 +413,25 @@ describe('CP/M 2.2 compatibility', () => {
     expect(machine.disk.files.some((f) => f.user === 5)).toBe(true);
   });
 
+  it('fills the default FCBs like the CP/M 2.2 CCP', async () => {
+    const { machine } = boot();
+    const fcb = (addr: number) => [machine.mem[addr], String.fromCharCode(...machine.mem.subarray(addr + 1, addr + 12))];
+    await run(machine, [0xc9], 'PROBE B:FOO*.T* $R/O');
+    expect(fcb(0x5c)).toEqual([2, 'FOO?????T??']);
+    expect(fcb(0x6c)).toEqual([0, '$R/O       ']); // '/' is not a delimiter
+    await run(machine, [0xc9], 'PROBE B:=A:X.TXT');
+    expect(fcb(0x5c)).toEqual([2, '           ']); // stops at '='
+    expect(fcb(0x6c)).toEqual([0, '           ']);
+  });
+
+  it('STAT sets file attributes', async () => {
+    const { machine, con } = boot();
+    machine.disk.put('NOTES', 'TXT', new Uint8Array(200));
+    await machine.ccp.execute('STAT NOTES.TXT $R/O');
+    expect(con.output).toContain('NOTES.TXT set to R/O');
+    expect(machine.disk.find(0, 'NOTES   ', 'TXT')!.ro).toBe(true);
+  });
+
   it('limits the Z80 clock when clockHz is set', async () => {
     const { machine } = boot();
     // 65536 iterations of DCX B / MOV A,B / ORA C / JNZ = 24 T-states each.

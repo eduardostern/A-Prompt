@@ -7,7 +7,9 @@ import { CpmMachine } from './cpm/machine';
 import { BUILTIN_FILES } from './assets/builtin-programs';
 import type { Disk } from './cpm/disk';
 import { CpmFile, MAX_BYTES, displayName, padExt, padName, trimName } from './cpm/disk';
-import { b64ToBytes, bytesToB64, decodeImage, encodeImage, sameBytes } from './storage';
+import {
+  StoredFileEntry, b64ToBytes, decodeFiles, decodeImage, encodeFiles, encodeImage, packFiles, sameBytes, unpackFiles,
+} from './storage';
 
 const LS_PREFIX = 'a-prompt.drive.';
 const LEGACY_LS_KEY = 'a-prompt.drive.v1';
@@ -59,6 +61,9 @@ let lastMachineDrive = 0;
 
 const builtinData = new Map<string, string>();
 for (const f of BUILTIN_FILES) builtinData.set(`${f.name}.${f.ext}`, f.data);
+/** Built-in program bytes, to skip saving unmodified copies on A:. */
+const builtinBytes = new Map<string, Uint8Array>();
+for (const f of BUILTIN_FILES) builtinBytes.set(`${f.name}.${f.ext}`, b64ToBytes(f.data));
 
 function loadBuiltins(): void {
   for (const f of BUILTIN_FILES) {
@@ -66,6 +71,7 @@ function loadBuiltins(): void {
   }
 }
 
+/** v2 file record (one base64 string per file); still read on restore. */
 interface StoredFile {
   n: string;
   e: string;
@@ -78,6 +84,8 @@ interface StoredDrive {
   files?: StoredFile[];
   /** v2: plain base64 image. */
   image?: string;
+  /** v3: deflated packed files (see storage.ts). */
+  filesz?: string;
   /** v3: deflated base64 image (see storage.ts). */
   imagez?: string;
   size?: number;
@@ -85,6 +93,8 @@ interface StoredDrive {
 
 /** Image bytes last written to localStorage, per drive, to skip unchanged saves. */
 const savedImages: (Uint8Array | undefined)[] = [];
+/** Packed files last written to localStorage, per drive. */
+const savedFiles: (Uint8Array | undefined)[] = [];
 /** Drives whose last save did not fit in localStorage. */
 const saveFailed: boolean[] = [];
 
@@ -103,6 +113,7 @@ function saveDrive(index: number): void {
       if (!bytes || sameBytes(savedImages[index], bytes)) return;
       localStorage.setItem(driveKey(index), JSON.stringify(encodeImage(bytes)));
       savedImages[index] = bytes;
+      savedFiles[index] = undefined;
       setSaveFailed(index, false);
     } catch {
       // Quota exceeded: the image stays in memory; the last good save is kept.
@@ -111,17 +122,25 @@ function saveDrive(index: number): void {
     return;
   }
   savedImages[index] = undefined;
-  const files: StoredFile[] = [];
+  const files: StoredFileEntry[] = [];
   for (const f of disk.files) {
     if (trimName(f.name) === '$$$') continue; // transient SUBMIT queue
     const key = `${trimName(f.name)}.${trimName(f.ext)}`;
-    const pristine = index === 0 && f.user === 0 && builtinData.get(key) === bytesToB64(f.data);
+    const builtin = builtinBytes.get(key);
+    const pristine = index === 0 && f.user === 0 && !f.ro && !f.sys && !!builtin && sameBytes(builtin, f.data);
     if (pristine) continue;
-    files.push({ n: trimName(f.name), e: trimName(f.ext), u: f.user, d: bytesToB64(f.data) });
+    files.push({ user: f.user, name: f.name, ext: f.ext, ro: f.ro, sys: f.sys, data: f.data });
   }
   try {
-    if (files.length) localStorage.setItem(driveKey(index), JSON.stringify({ v: 2, files }));
-    else localStorage.removeItem(driveKey(index));
+    if (!files.length) {
+      localStorage.removeItem(driveKey(index));
+      savedFiles[index] = undefined;
+    } else {
+      const packed = packFiles(files);
+      if (sameBytes(savedFiles[index], packed)) return;
+      localStorage.setItem(driveKey(index), JSON.stringify(encodeFiles(packed)));
+      savedFiles[index] = packed;
+    }
     setSaveFailed(index, false);
   } catch {
     setSaveFailed(index, true); // quota exceeded: keep running in memory
@@ -148,6 +167,16 @@ function restoreDrive(index: number): void {
         // v3 already holds these bytes; a v2 record is upgraded on the next save.
         if (parsed.v === 3) savedImages[index] = drives[index].exportImage() ?? undefined;
       }
+      return;
+    }
+    if (typeof parsed.filesz === 'string') {
+      const packed = decodeFiles(parsed);
+      const files = packed && unpackFiles(packed);
+      if (!files) return;
+      for (const f of files) {
+        if (f.data.length <= MAX_BYTES) drives[index].put(f.name, f.ext, f.data, f.user, f.ro, f.sys);
+      }
+      savedFiles[index] = packed ?? undefined;
       return;
     }
     if (!parsed.files) return;

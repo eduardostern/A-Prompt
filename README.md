@@ -75,7 +75,8 @@ keeps games with timing loops playable. **Reset** stops a runaway program
   logs (BDOS 4/5 and BIOS LIST/PUNCH).
 - **Upload/download** from the drive panel; drives A:–D: (4 MB each, laid
   out like a z80pack hard disk: 2K blocks, 1024 directory entries, so `STAT`
-  shows real free space) are persisted in the browser's `localStorage`.
+  shows real free space) are saved compressed in the browser's
+  `localStorage`, with user areas and R/O/SYS attributes.
 
 Bundled programs: **PIP**, **STAT**, **DDT**, **ED**, **ASM**, **LOAD**,
 **SUBMIT**, **DUMP**, **HELLO.COM**, **INPUT.COM**, plus **DEMO.SUB** and
@@ -309,7 +310,7 @@ z80pack's 4MB hard disk images (4,177,920 bytes: 255 tracks × 128 sectors,
 2K blocks, 1024 directory entries, 16-bit block pointers — z80pack's `HDBLK`)
 also mount, e.g. `hd-tools.dsk` from `cpmsim/disks/library`.
 
-Mounted images are saved in the browser compressed (deflate), so a 4MB disk
+Drives are saved in the browser compressed (deflate), so a 4MB disk
 fits in `localStorage`: `hd-tools.dsk`, 2.4MB of programs, takes about 1.5M
 characters instead of 5.6M. If a disk still does not fit (a full disk of
 already-compressed archives, say), the drive panel says so; the session keeps

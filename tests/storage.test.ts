@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { bytesToB64, decodeImage, encodeImage, sameBytes } from '../src/storage';
+import {
+  bytesToB64, decodeFiles, decodeImage, encodeFiles, encodeImage, packFiles, sameBytes, unpackFiles,
+} from '../src/storage';
 
 describe('drive image storage', () => {
   it('round-trips an image through deflate + base64', () => {
@@ -22,5 +24,36 @@ describe('drive image storage', () => {
   it('rejects a record whose size does not match', () => {
     const stored = encodeImage(new Uint8Array(1000));
     expect(decodeImage({ ...stored, size: 999 })).toBeNull();
+  });
+});
+
+describe('file drive storage', () => {
+  const files = [
+    { user: 0, name: 'HELLO   ', ext: 'COM', ro: false, sys: false, data: new Uint8Array([0x0e, 0x09, 0xc9]) },
+    { user: 3, name: 'NOTES   ', ext: 'TXT', ro: true, sys: true, data: new TextEncoder().encode('CP/M '.repeat(20_000)) },
+    { user: 15, name: 'EMPTY   ', ext: '   ', ro: false, sys: false, data: new Uint8Array(0) },
+  ];
+
+  it('round-trips names, user areas, attributes and data', () => {
+    const packed = packFiles(files);
+    const stored = encodeFiles(packed);
+    expect(stored.v).toBe(3);
+    // 100K of text compresses to a small fraction of its base64 size.
+    expect(stored.filesz.length).toBeLessThan(10_000);
+    const back = unpackFiles(decodeFiles(JSON.parse(JSON.stringify(stored)))!)!;
+    expect(back).toHaveLength(3);
+    for (let i = 0; i < files.length; i++) {
+      const { data, ...meta } = back[i];
+      const { data: want, ...wantMeta } = files[i];
+      expect(meta).toEqual(wantMeta);
+      expect(sameBytes(data, want)).toBe(true);
+    }
+  });
+
+  it('rejects truncated or foreign blocks', () => {
+    const packed = packFiles(files);
+    expect(unpackFiles(packed.subarray(0, packed.length - 1))).toBeNull();
+    expect(unpackFiles(new TextEncoder().encode('{"v":2}'))).toBeNull();
+    expect(decodeFiles({ ...encodeFiles(packed), size: 1 })).toBeNull();
   });
 });
