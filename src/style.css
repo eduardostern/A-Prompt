@@ -543,6 +543,67 @@ body::after {
 
 .software .btn-ghost { margin-top: 0; }
 
+.ai-card p,
+.ai-howto li {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #b9cdc1;
+}
+
+.ai-card code {
+  padding: 1px 4px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--green);
+  font-family: var(--mono);
+  font-size: 10px;
+}
+
+.ai-card a { color: var(--green); }
+
+.ai-key { display: flex; gap: 6px; margin-bottom: 8px; }
+
+.ai-key input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.ai-key input:focus { outline: none; border-color: var(--green); }
+
+.ai-key .chip,
+.ai-actions .chip { padding: 4px 8px; font-size: 9px; }
+
+.ai-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.ai-status { font-family: var(--mono); font-size: 10px; color: var(--muted); }
+.ai-status.ok { color: var(--green); }
+
+.ai-howto { margin-bottom: 10px; }
+
+.ai-howto summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.ai-howto ol { margin: 8px 0 0; padding-left: 18px; }
+
+.ai-card .ai-note { font-size: 11px; color: var(--muted); }
+
 .games .btn { text-decoration: none; margin-bottom: 8px; }
 
 .games .btn-ghost { margin-top: 0; }

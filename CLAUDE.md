@@ -121,6 +121,23 @@ user/drive; the CCP restores both from it after each program.
   `hd-tools.dsk`, …) via raw.githubusercontent.com — download to the
   scratchpad, never into the repo.
 
+## AI board
+
+- `ATDT DEEPSEEK` / `ATDT AI`: `modemDialer` in `src/main.ts` returns
+  `createAiBoard` (`src/aiboard.ts`), a Link that acts as a telnet server in
+  BINARY mode (`src/cpm/telnet-server.ts`) so ZMODEM data passes the modem.
+- DeepSeek is called from the browser (`src/deepseek.ts`, model
+  `deepseek-flash` = V4.1 Flash, SSE, `reasoning_effort` none for chat and
+  high for code); CORS allows our origin. The key is the visitor's own, in
+  localStorage `a-prompt.deepseek-key`, set from the AI board card or the
+  board's key prompt. Never route it through the Worker.
+- Programs: `PROGRAM_PROMPT` holds the DRI ASM rules; `assemble()` in
+  `src/cpm/assembler.ts` (also used by `scripts/assemble.ts`) runs ASM and
+  LOAD headless; error lines go back to the model, three tries; files go
+  out with `ZmodemSender` (`src/zmodem.ts`).
+- Tests use a fake `chat` and `cps: 0` (`tests/aiboard.test.ts`); no test
+  calls DeepSeek.
+
 ## Sample programs
 
 - `programs/*.ASM` are 8080 sources for DRI ASM 2.0: no Z80 mnemonics, and

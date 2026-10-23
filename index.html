@@ -132,6 +132,48 @@
             </div>
           </details>
 
+          <details class="card collapsible ai-card">
+            <summary><span class="card-title">AI board (DeepSeek)</span></summary>
+            <p class="ai-intro">
+              In the terminal, <code>TERM</code> then <code>ATDT DEEPSEEK</code> calls a
+              BBS whose sysop is DeepSeek V4.1 Flash: chat with it, or order a
+              program that it writes in 8080 assembly and sends you by ZMODEM.
+              It needs your own DeepSeek API key.
+            </p>
+            <div class="ai-key">
+              <input id="deepseek-key" type="password" autocomplete="off" spellcheck="false"
+                placeholder="sk-…" aria-label="DeepSeek API key" />
+              <button id="deepseek-show" class="chip" type="button">Show</button>
+            </div>
+            <div class="ai-actions">
+              <button id="deepseek-save" class="chip" type="button">Save</button>
+              <button id="deepseek-forget" class="chip" type="button">Forget</button>
+              <span id="deepseek-status" class="ai-status">No key yet.</span>
+            </div>
+            <details class="ai-howto">
+              <summary>How do I get a key?</summary>
+              <ol>
+                <li>Open <a href="https://platform.deepseek.com" target="_blank" rel="noreferrer">platform.deepseek.com</a>
+                  and sign up.</li>
+                <li>Add a little credit on
+                  <a href="https://platform.deepseek.com/top_up" target="_blank" rel="noreferrer">Top up</a>.
+                  The API is pay as you go; with no balance, calls fail with
+                  "insufficient balance".</li>
+                <li>Open <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noreferrer">API keys</a>,
+                  choose <b>Create new API key</b>, name it "A-Prompt" and copy it
+                  (it starts with <code>sk-</code>; copy it now, you may not see it again).</li>
+                <li>Paste it above and press <b>Save</b>.</li>
+                <li>In the terminal: <code>TERM</code>, then <code>ATDT DEEPSEEK</code>.</li>
+              </ol>
+            </details>
+            <p class="ai-note">
+              The key stays in this browser and goes only to api.deepseek.com;
+              calls are billed to your DeepSeek account. Anyone using this
+              browser profile can use it: press Forget, or delete the key on
+              the API keys page, to revoke it.
+            </p>
+          </details>
+
           <details class="card collapsible">
             <summary><span class="card-title">Software</span></summary>
             <p>
@@ -212,7 +254,9 @@
                 addressing, FCB extents (S2, F_OPEN) and ^S/^C on console
                 output; the human's idea made TETRIS tune itself with CP/M 3's
                 T_GET instead of a made-up timer port. Opus 5.5 later added the
-                telnet modem, TERM, XMODEM, ZMODEM and the VT100 bell. No GPT or Grok. Both are transformers — the only other
+                telnet modem, TERM, XMODEM, ZMODEM and the VT100 bell, and
+                brought DeepSeek V4.1 Flash back as the AI board's sysop, one
+                modem call away. No GPT or Grok. Both are transformers — the only other
                 one here is in the power supply.
               </p>
             </div>

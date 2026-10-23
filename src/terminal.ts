@@ -4,12 +4,8 @@ import '@xterm/xterm/css/xterm.css';
 import type { ConsoleIO } from './console';
 import { TerminalTranslator, TerminalType } from './terminal-translator';
 import { ringBell } from './bell';
+import { CP437 } from './cp437';
 
-/** CP437 (the character set CP/M software was written for) to Unicode. */
-const CP437 =
-  'ÇüéâäàåçêëèïîìÄÅÉæÆôöòûùÿÖÜ¢£¥₧ƒáíóúñÑªº¿⌐¬½¼¡«»' +
-  '░▒▓│┤╡╢╖╕╣║╗╝╜╛┐└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀' +
-  'αßΓπΣσµτΦΘΩδ∞φε∩≡±≥≤⌠⌡÷≈°∙·√ⁿ²■\u00a0';
 
 export class XtermConsole implements ConsoleIO {
   readonly term: Terminal;

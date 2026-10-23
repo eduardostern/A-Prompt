@@ -84,6 +84,11 @@ keeps games with timing loops playable. **Reset** stops a runaway program
 - **File transfer**: `XMODEM.COM` (CRC-16 or checksum; receives 128-byte
   and 1K blocks) and `ZMODEM.COM` (CRC-16, batch receive, restart from the
   last good byte after an error), both tested against lrzsz.
+- **AI board**: `ATDT DEEPSEEK` calls a BBS whose sysop is DeepSeek V4.1
+  Flash. Chat with it, or order a program: it writes 8080 assembly, the
+  bundled ASM and LOAD assemble it in your browser (errors go back to the
+  model to fix, up to three tries), and the `.ASM` and `.COM` come down the
+  line by ZMODEM. Bring your own DeepSeek API key.
 - **Disk images**: mount/export raw 8" SSSD (77×26, standard skew 6 as in
   cpmtools' `ibm-3740` and z80pack), 512K and 4MB `.dsk`/`.img` images, and
   z80pack's 4MB hard disks (`hd-tools.dsk` and friends).
@@ -159,6 +164,37 @@ Unix names become 8.3 (`my long.name.tgz` arrives as `MY-LONG-.TGZ`), and
 received files are padded to whole 128-byte records with `^Z`, as CP/M
 stores them. Ctrl-X cancels a transfer. Timeouts count seconds from the
 CP/M 3 `T_GET` clock (BDOS 105).
+
+### Calling the AI board
+
+```text
+A>TERM
+ATDT DEEPSEEK            CONNECT AI, then the board's menu
+  [C] Chat with the AI sysop
+  [P] Order a program (8080 .ASM and .COM by ZMODEM)
+P                        "a 10x10 multiplication table", name MULTAB
+                         ... thinking, assembling, fixing ...
+Ctrl-]                   then ZMODEM R, then MULTAB
+```
+
+The board needs your own DeepSeek API key; calls are billed to your
+DeepSeek account. To get one:
+
+1. Open [platform.deepseek.com](https://platform.deepseek.com) and sign up.
+2. Add a little credit on [Top up](https://platform.deepseek.com/top_up):
+   the API is pay as you go, and with no balance calls fail with
+   "insufficient balance".
+3. Open [API keys](https://platform.deepseek.com/api_keys), choose
+   **Create new API key**, name it "A-Prompt" and copy it (it starts with
+   `sk-`; copy it now, you may not see it again).
+4. Paste it into the **AI board (DeepSeek)** panel and press Save, or type
+   it when the board asks.
+
+The key is kept in this browser's localStorage and sent only to
+`api.deepseek.com`, straight from the page (DeepSeek allows it; nothing goes
+through the A-Prompt Worker). Anyone using the same browser profile can use
+it: press Forget, or delete the key on DeepSeek's API keys page, to revoke
+it. ESC stops an answer; text arrives at an emulated 2400 baud.
 
 ## Running games
 
@@ -480,6 +516,10 @@ upload it to a drive and run it.
 | `src/phonebook.ts` | Telnet BBSes the relay allows, and their WebSocket gateways |
 | `src/terminal.ts` | xterm.js + CP437 + keyboard |
 | `src/bell.ts` | VT100 bell (Web Audio) |
+| `src/aiboard.ts` | The AI board: menu, chat, program orders |
+| `src/deepseek.ts` | DeepSeek streaming client (browser, your key) |
+| `src/zmodem.ts` | ZMODEM sender in TypeScript, for the AI board |
+| `src/cpm/assembler.ts` | ASM + LOAD in a headless CP/M machine |
 | `worker/index.ts` | Cloudflare Worker: WebSocket-to-telnet relay |
 
 The memory map is the classic one: `0000h` jumps to the BIOS warm boot and
@@ -545,6 +585,14 @@ An effective Sino-American team:
    assembly and tested byte for byte against lrzsz (including corrupted
    blocks and restarts), telnet BINARY mode, and direct dialing of BBS
    WebSocket gateways.
+6. **DeepSeek comes home.** The human asked for a CP/M-to-AI bridge on
+   DeepSeek V4.1 Flash, the model that built the emulator. Opus 5.5 wired
+   it in as one more number to dial: `ATDT DEEPSEEK` reaches a board where
+   Flash chats as the sysop and writes 8080 programs, which are assembled
+   in the page by the very ASM.COM Flash's emulator runs, fixed from ASM's
+   own error lines, and delivered by a ZMODEM sender written for the
+   purpose. The model that wrote the machine now lives on the other end of
+   its modem.
 
 No GPT, Grok, or other OpenAI/xAI model was involved. Both DeepSeek and Claude
 are transformers, of course; the only *other* transformer here is the one in

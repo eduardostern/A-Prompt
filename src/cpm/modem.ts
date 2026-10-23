@@ -78,6 +78,8 @@ export class Modem {
   terminalType: () => string;
   windowSize: () => [number, number];
   now: () => number;
+  /** Numbers that reach something other than a BBS (ATI lists them). */
+  services: { number: string; name: string }[] = [];
 
   private state: State = 'command';
   private link?: Link;
@@ -256,6 +258,7 @@ export class Modem {
       this.reply(`${String(n + 1).padStart(2)}  ${e.host}:${e.port}${e.name ? `  ${e.name}` : ''}${direct}`);
     });
     if (book.some((e) => e.ws)) this.reply(' * connects straight from the browser');
+    for (const s of this.services) this.reply(`    ATDT ${s.number}  ${s.name}`);
     this.reply('Dial with ATDT n, ATDT host:port or ATDT wss://host:port');
   }
 

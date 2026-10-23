@@ -6,6 +6,9 @@ import type { TerminalType } from './terminal-translator';
 import { CpmMachine } from './cpm/machine';
 import { BUILTIN_FILES } from './assets/builtin-programs';
 import type { Dialer, Link, LinkHandlers } from './cpm/modem';
+import { createAiBoard } from './aiboard';
+import { assemble } from './cpm/assembler';
+import { streamChat } from './deepseek';
 import { inPhoneBook } from './phonebook';
 import type { Disk } from './cpm/disk';
 import { CpmFile, MAX_BYTES, displayName, padExt, padName, trimName } from './cpm/disk';
@@ -58,6 +61,58 @@ const el = <T extends HTMLElement>(id: string): T => {
 const con = new XtermConsole(el('terminal'));
 const machine = new CpmMachine(con);
 
+// ---- DeepSeek key (AI board) -------------------------------------------
+
+const DEEPSEEK_KEY = 'a-prompt.deepseek-key';
+const keyInput = el<HTMLInputElement>('deepseek-key');
+const keyStatus = el<HTMLElement>('deepseek-status');
+
+function getDeepSeekKey(): string | null {
+  try {
+    return localStorage.getItem(DEEPSEEK_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function setDeepSeekKey(key: string | null): void {
+  try {
+    if (key) localStorage.setItem(DEEPSEEK_KEY, key);
+    else localStorage.removeItem(DEEPSEEK_KEY);
+  } catch {
+    /* storage blocked: the key lasts for this call only */
+  }
+  showKeyStatus();
+}
+
+function showKeyStatus(): void {
+  const key = getDeepSeekKey();
+  keyStatus.textContent = key
+    ? `Key saved in this browser (${key.slice(0, 3)}…${key.slice(-4)}).`
+    : 'No key yet.';
+  keyStatus.classList.toggle('ok', Boolean(key));
+}
+
+el<HTMLButtonElement>('deepseek-save').addEventListener('click', () => {
+  const key = keyInput.value.trim();
+  if (!key) return;
+  setDeepSeekKey(key);
+  keyInput.value = '';
+});
+el<HTMLButtonElement>('deepseek-forget').addEventListener('click', () => {
+  setDeepSeekKey(null);
+  keyInput.value = '';
+});
+el<HTMLButtonElement>('deepseek-show').addEventListener('click', (e) => {
+  const show = keyInput.type === 'password';
+  keyInput.type = show ? 'text' : 'password';
+  (e.currentTarget as HTMLButtonElement).textContent = show ? 'Hide' : 'Show';
+});
+keyInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') el<HTMLButtonElement>('deepseek-save').click();
+});
+showKeyStatus();
+
 // ---- telnet modem -----------------------------------------------------
 
 /** A call over one WebSocket; `isRelay` waits for the relay's CONNECT frame. */
@@ -96,6 +151,15 @@ function relayCall(host: string, port: number, handlers: LinkHandlers): Link {
  * up and the board is in the phone book, it goes through the relay instead.
  */
 const modemDialer: Dialer = (target, handlers) => {
+  if (target.host === 'deepseek' || target.host === 'ai') {
+    return createAiBoard(handlers, {
+      getKey: getDeepSeekKey,
+      setKey: setDeepSeekKey,
+      chat: streamChat,
+      assemble: (name, source) => assemble(name, source, () => new Promise((r) => setTimeout(r, 0))),
+      schedule: (fn, ms) => { window.setTimeout(fn, ms); },
+    });
+  }
   if (!target.ws) return relayCall(target.host, target.port, handlers);
   let current: Link;
   let opened = false;
@@ -118,6 +182,7 @@ const modemDialer: Dialer = (target, handlers) => {
 };
 
 machine.modem.dialer = modemDialer;
+machine.modem.services = [{ number: 'DEEPSEEK', name: 'AI board: DeepSeek V4.1 Flash, your API key' }];
 machine.modem.terminalType = () => ({ ansi: 'ANSI', adm3a: 'ADM3A', vt52: 'VT52' })[con.terminalType];
 machine.modem.windowSize = () => [con.term.cols, con.term.rows];
 const drives = machine.drives;
