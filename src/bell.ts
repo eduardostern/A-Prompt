@@ -7,17 +7,18 @@
  * times in a row, for about a quarter second". A band-pass stands in for the
  * little speaker in the keyboard case.
  */
+import { audioContext } from './audio';
+
 const FREQ_HZ = 786;
 const DURATION_S = 0.25;
 const VOLUME = 0.12;
 
-let ctx: AudioContext | undefined;
 let busyUntil = 0;
 
 export function ringBell(): void {
+  const ctx = audioContext();
+  if (!ctx) return;
   try {
-    ctx ??= new AudioContext();
-    if (ctx.state === 'suspended') void ctx.resume();
     const t = ctx.currentTime;
     // A bell while one is sounding just merges into it, like the real one.
     if (t < busyUntil) return;

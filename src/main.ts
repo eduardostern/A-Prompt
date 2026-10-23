@@ -7,6 +7,8 @@ import { CpmMachine } from './cpm/machine';
 import { BUILTIN_FILES } from './assets/builtin-programs';
 import type { Dialer, Link, LinkHandlers } from './cpm/modem';
 import { createAiBoard } from './aiboard';
+import { withCallSound } from './call-sound';
+import { startCallSound } from './modem-audio';
 import { assemble } from './cpm/assembler';
 import { streamChat } from './deepseek';
 import { inPhoneBook } from './phonebook';
@@ -181,7 +183,22 @@ const modemDialer: Dialer = (target, handlers) => {
   };
 };
 
-machine.modem.dialer = modemDialer;
+const MODEM_PROFILE = 'a-prompt.modem';
+machine.modem.dialer = withCallSound(modemDialer, (target) =>
+  machine.modem.speaker === 0 ? undefined : startCallSound(`${target.host}:${target.port}`, machine.modem.volume));
+try {
+  const saved = localStorage.getItem(MODEM_PROFILE);
+  if (saved) machine.modem.loadProfile(JSON.parse(saved));
+} catch {
+  /* no saved profile */
+}
+machine.modem.onSaveProfile = (profile) => {
+  try {
+    localStorage.setItem(MODEM_PROFILE, JSON.stringify(profile));
+  } catch {
+    /* storage blocked */
+  }
+};
 machine.modem.services = [{ number: 'DEEPSEEK', name: 'AI board: DeepSeek V4.1 Flash, your API key' }];
 machine.modem.terminalType = () => ({ ansi: 'ANSI', adm3a: 'ADM3A', vt52: 'VT52' })[con.terminalType];
 machine.modem.windowSize = () => [con.term.cols, con.term.rows];

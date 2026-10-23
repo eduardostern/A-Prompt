@@ -121,6 +121,19 @@ user/drive; the CCP restores both from it after each program.
   `hd-tools.dsk`, …) via raw.githubusercontent.com — download to the
   scratchpad, never into the repo.
 
+## Modem speaker
+
+- `withCallSound` (`src/call-sound.ts`) wraps the dialer: `startCallSound`
+  (`src/modem-audio.ts`) plays dial tone, DTMF for a made-up number
+  (`digitsFor`), ringback, then the handshake; CONNECT and any early data
+  wait for it. Failure plays busy; the modem's own close after a remote
+  hang-up must not stop that.
+- `ATM0` (no sound, no delay), `ATL0-3`, `AT&W` saves to localStorage
+  `a-prompt.modem`, `ATZ` restores, `AT&F` resets. The bell and the modem
+  share one AudioContext (`src/audio.ts`).
+- The `Synth` schedule functions take any BaseAudioContext: render them in
+  an OfflineAudioContext (browser) and check frequencies with Goertzel.
+
 ## AI board
 
 - `ATDT DEEPSEEK` / `ATDT AI`: `modemDialer` in `src/main.ts` returns

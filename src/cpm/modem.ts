@@ -78,6 +78,13 @@ export class Modem {
   terminalType: () => string;
   windowSize: () => [number, number];
   now: () => number;
+  /** Speaker: ATM0 off, ATM1 on until connect, ATM2 always; ATL0-3 volume. */
+  speaker = 1;
+  volume = 2;
+  /** The profile AT&W stored and ATZ restores. */
+  private saved = { speaker: 1, volume: 2 };
+  /** AT&W: keep the profile somewhere that outlives the page. */
+  onSaveProfile?: (profile: { speaker: number; volume: number }) => void;
   /** Numbers that reach something other than a BBS (ATI lists them). */
   services: { number: string; name: string }[] = [];
 
@@ -222,10 +229,23 @@ export class Modem {
         case ' ': break;
         case 'E': this.echo = num() !== 0; break;
         case 'H': num(); this.hangup(false); break;
-        case 'Z': num(); this.echo = true; this.hangup(false); break;
+        case 'Z': num(); this.echo = true; this.hangup(false); this.restoreProfile(); break;
+        case 'M': this.speaker = Math.min(2, num()); break;
+        case 'L': this.volume = Math.min(3, num()); break;
         case 'I': num(); this.info(); break;
-        case 'V': case 'Q': case 'X': case 'M': case 'L': num(); break;
-        case '&': i++; num(); break;
+        case 'V': case 'Q': case 'X': num(); break;
+        case '&': {
+          const c2 = (cmd[i++] ?? '').toUpperCase();
+          num();
+          if (c2 === 'W') {
+            this.saved = { speaker: this.speaker, volume: this.volume };
+            this.onSaveProfile?.({ ...this.saved });
+          } else if (c2 === 'F') {
+            this.speaker = 1;
+            this.volume = 2;
+          }
+          break;
+        }
         case 'S': // S-registers: accept and ignore
           num();
           if (cmd[i] === '=') { i++; num(); } else if (cmd[i] === '?') { i++; this.reply('000'); }
@@ -246,8 +266,19 @@ export class Modem {
     this.result('OK');
   }
 
+  /** Loads a profile saved by AT&W in an earlier session. */
+  loadProfile(profile: { speaker: number; volume: number }): void {
+    this.saved = { speaker: Math.min(2, Math.max(0, profile.speaker | 0)), volume: Math.min(3, Math.max(0, profile.volume | 0)) };
+    this.restoreProfile();
+  }
+
+  private restoreProfile(): void {
+    this.speaker = this.saved.speaker;
+    this.volume = this.saved.volume;
+  }
+
   private info(): void {
-    this.reply('A-Prompt telnet modem');
+    this.reply(`A-Prompt telnet modem, speaker M${this.speaker} L${this.volume}`);
     const book = this.phoneBook();
     if (!book.length) {
       this.reply('No phone book: ATDT host:port');

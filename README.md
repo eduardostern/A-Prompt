@@ -80,7 +80,11 @@ keeps games with timing loops playable. **Reset** stops a runaway program
   or any `wss://` address you dial) are reached straight from the
   browser; the rest go over a WebSocket to the site's Worker, which
   connects only to the boards in `src/phonebook.ts`. The modem negotiates
-  telnet BINARY mode, so file transfers are 8-bit clean.
+  telnet BINARY mode, so file transfers are 8-bit clean. The speaker plays
+  the call: dial tone, touch tones, ringback, the 2100 Hz answer tone and
+  the handshake (CONNECT waits for it, as on a real modem), or a busy
+  signal. `ATM0` silences it, `ATL0`-`ATL3` set the volume, `AT&W` keeps
+  the setting and `ATZ` restores it.
 - **File transfer**: `XMODEM.COM` (CRC-16 or checksum; receives 128-byte
   and 1K blocks) and `ZMODEM.COM` (CRC-16, batch receive, restart from the
   last good byte after an error), both tested against lrzsz.
@@ -138,6 +142,7 @@ ATI                      lists the phone book (* = direct WebSocket)
 ATDT 1                   dials entry 1 (Vertrauen): CONNECT DIRECT
 ATDT 3                   dials entry 3 (Black Flag) through the relay
 ATDT wss://host:port     any BBS WebSocket gateway, straight from the browser
+ATM0&W                   speaker off for good (ATM1&W to bring it back)
 ...                      Ctrl-] returns to A> with the call still up
 ```
 
@@ -526,6 +531,8 @@ upload it to a drive and run it.
 | `src/phonebook.ts` | Telnet BBSes the relay allows, and their WebSocket gateways |
 | `src/terminal.ts` | xterm.js + CP437 + keyboard |
 | `src/bell.ts` | VT100 bell (Web Audio) |
+| `src/modem-audio.ts` | Modem speaker: dial, DTMF, ring, handshake, busy |
+| `src/call-sound.ts` | Holds CONNECT and early data until the handshake ends |
 | `src/aiboard.ts` | The AI board: menu, chat, program orders |
 | `src/deepseek.ts` | DeepSeek streaming client (browser, your key) |
 | `src/zmodem.ts` | ZMODEM sender in TypeScript, for the AI board |
