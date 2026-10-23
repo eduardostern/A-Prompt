@@ -60,8 +60,10 @@
             </div>
           </div>
 
-          <div class="terminal-wrap">
+          <div class="terminal-wrap" id="terminal-wrap">
             <div id="terminal" class="terminal"></div>
+            <div class="crt-roll" aria-hidden="true"></div>
+            <div class="crt-flicker" aria-hidden="true"></div>
           </div>
 
           <div class="panel-foot">
@@ -124,6 +126,48 @@
               <button class="chip" data-cmd="TETRIS" type="button">TETRIS</button>
               <button class="chip" data-cmd="CLS" type="button">CLS</button>
             </div>
+          </details>
+
+          <details class="card collapsible display-card" id="display-card">
+            <summary><span class="card-title">Display</span></summary>
+            <div class="display-presets" id="display-presets"></div>
+            <div class="display-grid">
+              <label for="display-font">Font</label>
+              <select id="display-font" class="terminal-select"></select>
+              <label for="display-size">Size</label>
+              <select id="display-size" class="terminal-select"></select>
+              <label for="display-phosphor">Phosphor</label>
+              <select id="display-phosphor" class="terminal-select">
+                <option value="color">Colour</option>
+                <option value="green">Green (P1)</option>
+                <option value="amber">Amber (P3)</option>
+                <option value="white">White (P4)</option>
+              </select>
+              <label for="display-background">Background</label>
+              <span class="display-bg">
+                <input id="display-background" type="color" />
+                <button id="display-background-reset" class="chip" type="button">Default</button>
+              </span>
+              <label for="display-scanlines">Scanlines</label>
+              <select id="display-scanlines" class="terminal-select">
+                <option value="off">Off</option>
+                <option value="light">Light</option>
+                <option value="heavy">Heavy</option>
+              </select>
+              <label for="display-signal">Signal</label>
+              <select id="display-signal" class="terminal-select" title="NTSC and PAL add colour fringes and a 60 or 50 Hz hum bar">
+                <option value="rgb">RGB (clean)</option>
+                <option value="ntsc">NTSC (60 Hz)</option>
+                <option value="pal">PAL (50 Hz)</option>
+              </select>
+            </div>
+            <div class="display-effects">
+              <label><input type="checkbox" id="display-glow" /> Phosphor glow</label>
+              <label><input type="checkbox" id="display-flicker" /> Flicker</label>
+              <label><input type="checkbox" id="display-curve" /> Curved glass</label>
+              <label><input type="checkbox" id="display-interference" /> Magnetic interference</label>
+            </div>
+            <p class="display-note">Flicker and interference stay still if your system asks for reduced motion.</p>
           </details>
 
           <details class="card collapsible">

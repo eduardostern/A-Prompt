@@ -61,6 +61,10 @@ Zork, WordStar and MBASIC from your own archive.
 - **The BOFH.** Press `B` and the machine room phone rings. The PFY is
   listening. Mind the Halon button.
 - **Period terminals.** ANSI/VT100 with CP437, ADM-3A and VT52 emulation.
+- **A CRT on your desk.** The Display panel switches to period fonts (DEC
+  VT220, VT323, IBM VGA), green, amber or white phosphor, any background,
+  and adds scanlines, phosphor glow, flicker, curved glass, magnetic
+  interference and NTSC or PAL colour fringes with a rolling hum bar.
 - **Real disks.** Mount and export 8" SSSD, 512K, 4 MB and z80pack hard
   disk images; four drives saved in your browser.
 - **Built by AIs for under $1, then finished properly.** See
@@ -686,4 +690,8 @@ A-Prompt was designed and built by Eduardo Stern. See `AUTHORS`.
 - `HELLO`, `COLOR`, `TETRIS`, `TERM`, `XMODEM`, `ZMODEM` (`.COM` and `.ASM`) and `DEMO.SUB` are original
   examples for this project, assembled with the bundled ASM and LOAD.
 - xterm.js, fflate and other dependencies retain their own MIT licenses.
+- Terminal fonts (`src/fonts/`, unmodified): Glass TTY VT220 by Viacheslav
+  Slavinsky (public domain); VT323 by Peter Hull (SIL OFL 1.1); IBM VGA 8x16
+  from [The Ultimate Oldschool PC Font Pack](https://int10h.org/oldschool-pc-fonts/)
+  by VileR ([CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)).
 - `zexdoc`/`zexall` are Frank Cringle's public-domain Z80 exercisers.

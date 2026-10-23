@@ -209,7 +209,8 @@ body::after {
 .terminal-wrap {
   position: relative;
   height: clamp(430px, 60vh, 640px);
-  background: #08110b;
+  background: var(--term-bg, #08110b);
+  overflow: hidden;
 }
 
 .terminal { position: absolute; inset: 12px 14px; }
@@ -225,6 +226,91 @@ body::after {
   opacity: 0.04;
   background: repeating-linear-gradient(0deg, #9dffbe 0 1px, transparent 1px 3px);
   mix-blend-mode: screen;
+}
+
+/* ---- display effects (Display card, src/display-ui.ts) -------------- */
+
+.terminal-wrap[data-scanlines="off"]::after { display: none; }
+
+.terminal-wrap[data-scanlines="heavy"]::after {
+  opacity: 1;
+  background: repeating-linear-gradient(180deg, transparent 0 2px, rgba(0, 0, 0, 0.42) 2px 3px);
+  mix-blend-mode: normal;
+}
+
+/* Glow and colour fringes: every span resolves currentColor to its own colour. */
+.terminal-wrap {
+  --fx-glow: 0 0 0 transparent;
+  --fx-fringe-a: 0 0 0 transparent;
+  --fx-fringe-b: 0 0 0 transparent;
+}
+.terminal-wrap.fx-glow {
+  --fx-glow: 0 0 2px color-mix(in srgb, currentColor 65%, transparent),
+    0 0 10px color-mix(in srgb, currentColor 35%, transparent);
+}
+.terminal-wrap[data-signal="ntsc"] {
+  --fx-fringe-a: 1px 0 rgba(255, 50, 70, 0.42);
+  --fx-fringe-b: -1px 0 rgba(40, 150, 255, 0.42);
+}
+.terminal-wrap[data-signal="pal"] {
+  --fx-fringe-a: 0.5px 0.6px rgba(255, 80, 170, 0.24);
+  --fx-fringe-b: -0.5px -0.6px rgba(70, 255, 190, 0.22);
+}
+.terminal-wrap .xterm-rows > div,
+.terminal-wrap .xterm-rows span {
+  text-shadow: var(--fx-fringe-a), var(--fx-fringe-b), var(--fx-glow);
+}
+
+/* The hum bar of a composite signal: a brighter band rolling down the screen. */
+.crt-roll,
+.crt-flicker {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+}
+.crt-roll {
+  z-index: 4;
+  background: linear-gradient(180deg, transparent 0%, rgba(255, 255, 255, 0.035) 45%, rgba(255, 255, 255, 0.05) 50%, transparent 100%);
+  height: 30%;
+  top: -30%;
+  bottom: auto;
+}
+.terminal-wrap[data-signal="ntsc"] .crt-roll { opacity: 1; animation: crt-roll 6s linear infinite; }
+.terminal-wrap[data-signal="pal"] .crt-roll { opacity: 1; animation: crt-roll 9s linear infinite; }
+@keyframes crt-roll { to { transform: translateY(440%); } }
+
+/* Flicker: the phosphor's brightness wavers; PAL's 50 Hz shows more. */
+.crt-flicker { z-index: 5; background: #000; }
+.fx-flicker .crt-flicker { animation: crt-flicker 0.17s steps(1) infinite; }
+.fx-flicker[data-signal="pal"] .crt-flicker { animation-name: crt-flicker-pal; animation-duration: 0.2s; }
+@keyframes crt-flicker {
+  0% { opacity: 0.03; } 18% { opacity: 0.07; } 35% { opacity: 0.015; }
+  52% { opacity: 0.055; } 70% { opacity: 0.025; } 86% { opacity: 0.06; }
+}
+@keyframes crt-flicker-pal {
+  0% { opacity: 0.05; } 20% { opacity: 0.1; } 40% { opacity: 0.03; }
+  60% { opacity: 0.085; } 80% { opacity: 0.045; }
+}
+
+/* Curved glass: dark rounded corners and a deeper vignette. */
+.fx-curve::before {
+  border-radius: 26px / 34px;
+  box-shadow: 0 0 0 40px var(--panel), inset 0 0 70px rgba(0, 0, 0, 0.7);
+  background: radial-gradient(ellipse at center, transparent 50%, rgba(0, 0, 0, 0.45) 100%);
+}
+.fx-curve .terminal { inset: 18px 24px; }
+
+/* Magnetic interference: now and then the picture shears and tints. */
+.fx-interference .terminal { animation: crt-wobble 7s infinite; }
+@keyframes crt-wobble {
+  0%, 84%, 100% { transform: none; filter: none; }
+  85% { transform: translateX(3px) skewX(-1.6deg); filter: hue-rotate(35deg) saturate(1.4); }
+  86.5% { transform: translateX(-4px) skewX(1.2deg); filter: hue-rotate(-25deg); }
+  88% { transform: translateX(2px) skewX(-0.7deg); filter: hue-rotate(15deg); }
+  89.5% { transform: none; filter: none; }
+  94% { transform: translateX(-1px) skewY(0.15deg); }
+  95% { transform: none; }
 }
 
 .terminal-wrap::before {
@@ -1114,3 +1200,40 @@ body { overflow: hidden; }
   color: var(--amber);
 }
 .save-warning b { color: var(--text); font-weight: 600; }
+
+/* ---- Display card ----------------------------------------------------- */
+
+.display-presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.display-presets .chip.active { color: var(--green); border-color: var(--green-2); }
+
+.display-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 10px;
+  align-items: center;
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.display-grid .terminal-select { width: 100%; }
+.display-bg { display: flex; gap: 8px; align-items: center; }
+.display-bg input[type="color"] {
+  width: 38px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: none;
+  cursor: pointer;
+}
+.display-effects {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 10px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--text);
+}
+.display-effects label { display: flex; gap: 6px; align-items: center; cursor: pointer; }
+.display-effects input { accent-color: var(--green); }
+.display-note { margin-top: 10px; font-size: 11px; color: var(--muted); }

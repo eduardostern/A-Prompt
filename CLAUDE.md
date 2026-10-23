@@ -52,6 +52,9 @@ exerciser after any change to `src/z80.ts`.
 | `src/phonebook.ts` | BBSes the modem may dial (relay allowlist) |
 | `worker/index.ts` | Cloudflare Worker: `/relay` WebSocket-to-telnet |
 | `src/bell.ts` | VT100 bell, 786 Hz square wave for 250 ms |
+| `src/display.ts` | Display settings, presets, phosphor themes (pure) |
+| `src/display-ui.ts` | Display card; CRT effects are CSS classes on `#terminal-wrap` |
+| `src/fonts/` | Period terminal fonts with their licences |
 
 ## I/O ports
 

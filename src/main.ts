@@ -9,6 +9,7 @@ import type { Dialer, Link, LinkHandlers } from './cpm/modem';
 import { createAiBoard } from './aiboard';
 import { withCallSound } from './call-sound';
 import { audioContext } from './audio';
+import { setupDisplay } from './display-ui';
 import { startCallSound } from './modem-audio';
 import { assemble } from './cpm/assembler';
 import { streamChat } from './deepseek';
@@ -62,6 +63,7 @@ const el = <T extends HTMLElement>(id: string): T => {
 };
 
 const con = new XtermConsole(el('terminal'));
+const display = setupDisplay(con, () => window.innerWidth < 700);
 const machine = new CpmMachine(con);
 
 // ---- DeepSeek key (AI board) -------------------------------------------
@@ -876,7 +878,7 @@ resetBtn.addEventListener('click', () => {
   con.focus();
 });
 
-document.querySelectorAll<HTMLButtonElement>('.chip').forEach((chip) => {
+document.querySelectorAll<HTMLButtonElement>('.chip[data-cmd]').forEach((chip) => {
   chip.addEventListener('click', () => {
     if (machine.busy) return;
     con.send((chip.dataset.cmd ?? '') + '\r');
@@ -911,7 +913,7 @@ resetMachine.addEventListener('click', () => {
 });
 
 window.addEventListener('resize', () => {
-  applyFontSize();
+  display.refit();
   const mobile = isMobileLayout();
   if (mobile && !wasMobile) setPanels(false, false);
   else setPanels(panelsOpen, false);
@@ -922,10 +924,6 @@ new ResizeObserver(() => con.fit()).observe(el('terminal'));
 new ResizeObserver(() => con.fit()).observe(consolePanel);
 document.fonts?.ready.then(() => con.fit());
 
-function applyFontSize(): void {
-  const size = window.innerWidth < 700 ? 12 : 15;
-  if (con.term.options.fontSize !== size) con.term.options.fontSize = size;
-}
 
 consolePanel.addEventListener('click', (e) => {
   if ((e.target as HTMLElement).closest('button')) return;
@@ -945,7 +943,6 @@ window.setInterval(() => {
   updateClock();
   renderDevices();
 }, 1000);
-applyFontSize();
 statusText.textContent = 'READY';
 con.focus();
 // Browsers keep audio paused until the first click or key; the power-on bell
