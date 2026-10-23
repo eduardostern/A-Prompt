@@ -160,6 +160,10 @@ user/drive; the CCP restores both from it after each program.
   to 64K from `ZMODEM S`; `sourceText` cuts it at ^Z; the board assembles
   it, asks what to change, and runs `FIX_PROMPT` (PROGRAM_PROMPT plus "keep
   the rest") through the same `build()` loop and sender.
+- Builds show live (`LiveView`): reasoning indented and word-wrapped,
+  then the source. Over 2 s of backlog at the board's baud rate, it
+  finishes the sentence or line, skips until the backlog is under a
+  quarter of that, and resumes at the next one after `...`.
 - `build()` keeps the conversation in `session`; after the transfer the
   board asks for more changes (`'more'` mode), appends them and builds
   again, `trimHistory` capping it at `MAX_HISTORY_CHARS`. For 1.5 s after

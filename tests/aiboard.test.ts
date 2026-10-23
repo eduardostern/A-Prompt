@@ -6,7 +6,7 @@ import { CpmMachine } from '../src/cpm/machine';
 import { BUILTIN_FILES } from '../src/assets/builtin-programs';
 import type { ConsoleIO } from '../src/console';
 import {
-  BOFH_PICKUP, FIX_PROMPT, MAX_HISTORY_CHARS, createAiBoard, programName, sourceText, trimHistory,
+  BOFH_PICKUP, FIX_PROMPT, LiveView, MAX_HISTORY_CHARS, createAiBoard, programName, sourceText, trimHistory,
 } from '../src/aiboard';
 import { assemble } from '../src/cpm/assembler';
 import type { ChatOptions, ChatChunk } from '../src/deepseek';
@@ -159,6 +159,10 @@ describe('AI board', () => {
     b.type('hello2\r');
     await b.waitFor('by ZMODEM now');
     expect(b.screen()).toContain('Sending them back for a fix (try 2 of 3)');
+    // The build is shown live: the reasoning, then the source as it is written.
+    expect(b.screen()).toContain('[DeepSeek is thinking]\r\n  plan');
+    expect(b.screen()).toContain('[DeepSeek is writing HELLO2.ASM]');
+    expect(b.screen()).toContain("MSG:    DB      'Hello from the AI board'");
     expect(b.calls[0].thinking).toBe(true);
     expect(b.calls[1].messages.at(-1)!.content).toMatch(/^ASM 2\.0 reported these errors/);
     expect(b.screen()).toContain('Sending HELLO2.ASM and HELLO2.COM');
@@ -324,5 +328,52 @@ describe('AI board', () => {
     expect(programName('my-prog.asm')).toBe('MYPROG');
     expect(programName('1st.ASM')).toBe('X1ST');
     expect(programName('notes.txt')).toBeUndefined();
+  });
+});
+
+describe('live view of a build', () => {
+  const view = (backlog: () => number) => {
+    let out = '';
+    const v = new LiveView((t) => { out += t; }, backlog, 100, { thinking: '[thinking]', text: '[writing X.ASM]' });
+    return { v, out: () => out };
+  };
+
+  it('indents and word-wraps the reasoning, then shows the source with tabs expanded', () => {
+    const { v, out } = view(() => 0);
+    v.push('thinking', 'word '.repeat(30));
+    v.push('text', '\tORG\t100H\nSTART:\tRET\n');
+    v.end();
+    const lines = out().split('\r\n');
+    expect(lines[1]).toBe('[thinking]');
+    expect(lines[2].startsWith('  word word')).toBe(true);
+    expect(lines[3].startsWith('  word')).toBe(true);
+    expect(lines.every((l) => l.length <= 78)).toBe(true);
+    expect(out()).toContain('[writing X.ASM]\r\n        ORG     100H\r\nSTART:  RET\r\n');
+  });
+
+  it('skips ahead when the line falls behind, and resumes at a line of source', () => {
+    let backlog = 0;
+    const { v, out } = view(() => backlog);
+    v.push('text', 'LINE1\n');
+    backlog = 500; // the 2400 baud line is behind
+    v.push('text', 'LINE2\nLINE3\n');
+    backlog = 0;
+    v.push('text', 'E4\nLINE5\n');
+    expect(out()).toContain('LINE1\r\n');
+    expect(out()).not.toContain('LINE2');
+    expect(out()).not.toContain('E4');
+    expect(out()).toContain('  ...\r\nLINE5\r\n');
+  });
+
+  it('finishes the sentence it is on before skipping, and marks a skipped end', () => {
+    let backlog = 0;
+    const { v, out } = view(() => backlog);
+    v.push('thinking', 'First idea is ');
+    backlog = 500;
+    v.push('thinking', 'good. Second idea is hidden. ');
+    v.end();
+    expect(out()).toContain('First idea is good.');
+    expect(out()).not.toContain('Second');
+    expect(out()).toMatch(/good\. +\.\.\./);
   });
 });

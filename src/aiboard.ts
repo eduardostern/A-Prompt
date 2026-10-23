@@ -230,14 +230,20 @@ export function programName(file: string): string | undefined {
 class Wrap {
   col = 0;
   private word = '';
-  constructor(private emit: (s: string) => void) {}
+  /** `indent` spaces start every line after the first. */
+  constructor(private emit: (s: string) => void, private indent = 0) {}
+
+  private newline(): void {
+    this.emit('\r\n' + ' '.repeat(this.indent));
+    this.col = this.indent;
+  }
 
   push(text: string): void {
     for (const ch of text.replace(/\r/g, '').replace(/\t/g, '    ')) {
-      if (ch === '\n') { this.flushWord(); this.emit('\r\n'); this.col = 0; }
+      if (ch === '\n') { this.flushWord(); this.newline(); }
       else if (ch === ' ') {
         this.flushWord();
-        if (this.col > 0 && this.col < WIDTH) { this.emit(' '); this.col++; }
+        if (this.col > this.indent && this.col < WIDTH) { this.emit(' '); this.col++; }
       } else {
         this.word += ch;
         if (this.word.length >= WIDTH) this.flushWord();
@@ -247,10 +253,106 @@ class Wrap {
 
   flushWord(): void {
     if (!this.word) return;
-    if (this.col > 0 && this.col + this.word.length > WIDTH) { this.emit('\r\n'); this.col = 0; }
+    if (this.col > this.indent && this.col + this.word.length > WIDTH) this.newline();
     this.emit(this.word);
     this.col += this.word.length;
     this.word = '';
+  }
+}
+
+/**
+ * A build shown live: DeepSeek's reasoning, word-wrapped and indented, then
+ * the source as it is written. The line runs at 2400 baud and the model is
+ * faster, so when more than `limit` bytes are waiting to go out it finishes
+ * the sentence (reasoning) or line (source) it is on, skips ahead until the
+ * line has nearly caught up, and resumes at the next sentence or line after
+ * an ellipsis: whole passages of the live end, never minutes behind.
+ */
+export class LiveView {
+  private kind: 'thinking' | 'text' | '' = '';
+  private wrap: Wrap;
+  private col = 0;
+  private state: 'showing' | 'finishing' | 'skipping' = 'showing';
+  private prev = '';
+  /** The last character shown or skipped ended a sentence or line. */
+  private atBoundary = true;
+
+  constructor(
+    private emit: (s: string) => void,
+    private backlog: () => number,
+    private limit: number,
+    private labels: { thinking: string; text: string },
+  ) {
+    this.wrap = new Wrap(this.emit, 2);
+  }
+
+  push(kind: 'thinking' | 'text', text: string): void {
+    if (kind !== this.kind) {
+      this.end();
+      this.emit(`\r\n${this.labels[kind]}\r\n${kind === 'thinking' ? '  ' : ''}`);
+      this.kind = kind;
+      this.wrap.col = 2;
+      this.state = 'showing';
+      this.prev = '\n';
+      this.atBoundary = true;
+    }
+    const behind = this.backlog();
+    if (this.state === 'showing' && behind > this.limit) this.state = this.atBoundary ? 'skipping' : 'finishing';
+    const resume = this.state === 'skipping' && behind < this.limit / 4;
+    for (const ch of text) {
+      const boundary = this.boundary(ch);
+      this.prev = ch;
+      this.atBoundary = boundary;
+      if (this.state === 'skipping') {
+        if (resume && boundary) {
+          this.state = 'showing';
+          if (kind === 'thinking') this.wrap.push('... ');
+          else this.emit('  ...\r\n');
+        }
+        continue;
+      }
+      this.show(ch);
+      if (this.state === 'finishing' && boundary) this.state = 'skipping';
+    }
+  }
+
+  /** True when `ch` ends a sentence (reasoning) or a line (source). */
+  private boundary(ch: string): boolean {
+    if (ch === '\n') return true;
+    return this.kind === 'thinking' && /\s/.test(ch) && /[.!?:]/.test(this.prev);
+  }
+
+  private show(ch: string): void {
+    if (this.kind === 'thinking') {
+      if (ch === '\n' && this.prev === '\n') return; // no blank lines
+      this.wrap.push(ch);
+      return;
+    }
+    if (ch === '\r') return;
+    if (ch === '\n') { this.emit('\r\n'); this.col = 0; return; }
+    if (ch === '\t') {
+      const n = 8 - (this.col % 8);
+      if (this.col + n < WIDTH) { this.emit(' '.repeat(n)); this.col += n; }
+      return;
+    }
+    if (this.col >= WIDTH - 1) return; // long source lines are cut, not wrapped
+    this.emit(ch);
+    this.col++;
+  }
+
+  /** Ends the current section on a fresh line, marking a skipped end. */
+  end(): void {
+    const skipped = this.state !== 'showing';
+    if (this.kind === 'thinking') {
+      if (skipped) this.wrap.push(' ...');
+      this.wrap.flushWord();
+      if (this.wrap.col > 2) this.emit('\r\n');
+    } else if (this.kind === 'text') {
+      if (this.col) this.emit('\r\n');
+      if (skipped) this.emit('  ...\r\n');
+    }
+    this.col = 0;
+    this.state = 'showing';
   }
 }
 
@@ -321,6 +423,13 @@ class AiBoard implements Link {
 
   private say(text: string): void {
     this.out(toCp437(text), true);
+  }
+
+  /** Bytes still waiting to go out at the emulated baud rate. */
+  private backlog(): number {
+    let n = 0;
+    for (const q of this.queue) if (q.paced) n += q.bytes.length;
+    return n;
   }
 
   private out(bytes: number[], paced: boolean): void {
@@ -514,7 +623,7 @@ class AiBoard implements Link {
   /** Streams one answer. Returns the text, or undefined when it failed. */
   private async ask(
     messages: ChatMessage[],
-    opts: { thinking: boolean; show: 'text' | 'dots'; prefix?: number; hangs?: boolean },
+    opts: { thinking: boolean; show: 'text' | 'live'; prefix?: number; hangs?: boolean; file?: string },
   ): Promise<string | undefined> {
     const key = this.deps.getKey();
     if (!key) { this.askKey(); return undefined; }
@@ -525,9 +634,11 @@ class AiBoard implements Link {
     let text = '';
     let held = ''; // text that might turn out to be [HANGUP]
     this.hungUp = false;
-    let dots = 0;
-    let line = 0;
-    let lastKind = '';
+    const cps = this.deps.cps ?? 240;
+    const live = new LiveView((t) => this.say(t), () => this.backlog(), Math.max(cps * 2, 1), {
+      thinking: '[DeepSeek is thinking]',
+      text: `[DeepSeek is writing ${opts.file ?? 'the program'}]`,
+    });
     try {
       for await (const chunk of this.deps.chat({
         key, messages: [...messages], thinking: opts.thinking, signal: this.abort.signal,
@@ -543,16 +654,11 @@ class AiBoard implements Link {
           const keep = this.hungUp ? 0 : partialSuffix(held, HANGUP);
           wrap.push(held.slice(0, held.length - keep));
           held = held.slice(held.length - keep);
-        } else if (opts.show === 'dots' && ++dots % 40 === 0) {
-          if (chunk.kind !== lastKind) {
-            this.say(`${line ? '\r\n' : ''}${chunk.kind === 'thinking' ? 'thinking' : 'writing'} `);
-            line = 9;
-          }
-          lastKind = chunk.kind;
-          this.say('.');
-          if (++line >= WIDTH) { this.say('\r\n'); line = 0; }
+        } else if (opts.show === 'live') {
+          live.push(chunk.kind, chunk.text);
         }
       }
+      if (opts.show === 'live') live.end();
       wrap.push(held);
       wrap.flushWord();
       return text;
@@ -655,7 +761,7 @@ class AiBoard implements Link {
     let source = '';
     let result: AssemblyResult | undefined;
     for (let attempt = 1; attempt <= FIX_TRIES; attempt++) {
-      const answer = await this.ask(messages, { thinking: true, show: 'dots' });
+      const answer = await this.ask(messages, { thinking: true, show: 'live', file: `${name}.ASM` });
       if (this.closed) return;
       if (answer === undefined) { this.session = undefined; if (this.mode === 'busy') this.menu(); return; }
       source = cleanSource(answer);
