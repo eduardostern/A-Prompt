@@ -5,14 +5,15 @@
  * BINARY mode: a banner, a menu, echoed input, text at an emulated 2400
  * baud. Behind it, DeepSeek V4.1 Flash chats, or writes an 8080 program
  * that is assembled here with the bundled ASM and LOAD (errors go back to
- * the model to fix) and sent down the line by ZMODEM.
+ * the model to fix) and sent down the line by ZMODEM. The caller can also
+ * upload a .ASM by ZMODEM and have it fixed the same way.
  */
 import type { Link, LinkHandlers } from './cpm/modem';
 import { TelnetServer } from './cpm/telnet-server';
 import type { AssemblyResult } from './cpm/assembler';
 import { toCp437 } from './cp437';
 import { ChatFn, ChatMessage, DeepSeekError, explain } from './deepseek';
-import { ZmodemSender } from './zmodem';
+import { ZFile, ZmodemReceiver, ZmodemSender } from './zmodem';
 
 export interface AiBoardDeps {
   getKey(): string | null;
@@ -28,6 +29,8 @@ export interface AiBoardDeps {
 
 const WIDTH = 78;
 const FIX_TRIES = 3;
+/** Largest source the caller may upload for fixing. */
+export const MAX_UPLOAD_SOURCE = 64 * 1024;
 const ESC = 0x1b, BS = 8, DEL = 127, CR = 13, LF = 10;
 
 export const CHAT_PROMPT = `You are the sysop AI of the A-Prompt AI Board, a bulletin board system that
@@ -38,7 +41,8 @@ code fences, no emoji, no Unicode. Keep answers short, a few lines, unless
 asked for more: the caller reads at 240 characters a second. Be friendly
 and a little nerdy, like a 1980s sysop. You know CP/M 2.2, the 8080 and
 Z80, WordStar, MBASIC, Turbo Pascal and the computing of the era. If the
-caller wants a program written, tell them to type /menu and choose P.`;
+caller wants a program written, tell them to type /menu and choose P; to
+have a program of theirs fixed, /menu and F.`;
 
 export const BOFH_PROMPT = `You are the Bastard Operator From Hell, the BOFH, played as faithfully as
 you can to the character in Simon Travaglia's stories (Usenet from 1992,
@@ -159,6 +163,14 @@ ASM 2.0 rules:
 - Keep it under about 400 lines and make it right first time: simple
   logic, careful register use, every label defined.`;
 
+export const FIX_PROMPT = `${PROGRAM_PROMPT}
+
+This time the caller sends an existing program and says what is wrong with
+it or what to change. Make that change and fix any assembly errors listed,
+but keep the rest of the program as it is: its labels, comments, layout and
+style. Do not rewrite what works. Output the whole corrected source, from
+the first line to END, only the source.`;
+
 const ERROR_LETTERS = `Error letters: D data, E expression, L label, N not implemented, O overflow
 (string too long), P phase, R register, S syntax, U undefined symbol, V value.`;
 
@@ -169,7 +181,34 @@ export function cleanSource(text: string): string {
   return src.replace(/^\n+/, '').replace(/\s+$/, '') + '\n';
 }
 
-type Mode = 'key' | 'menu' | 'chat' | 'describe' | 'name' | 'busy' | 'zmodem' | 'bye';
+type Mode = 'key' | 'menu' | 'chat' | 'describe' | 'name' | 'busy' | 'zmodem' | 'upload' | 'fix' | 'bye';
+
+/**
+ * An uploaded file as 8080 source text: up to the first ^Z, CR LF to LF,
+ * and only printable ASCII, tabs and form feeds. Undefined if it is binary.
+ */
+export function sourceText(data: Uint8Array): string | undefined {
+  let end = data.indexOf(0x1a);
+  if (end < 0) end = data.length;
+  let text = '';
+  for (let i = 0; i < end; i++) {
+    const b = data[i];
+    if (b === 13 && data[i + 1] === 10) continue;
+    if (b === 13) text += '\n';
+    else if ((b >= 32 && b < 127) || b === 9 || b === 10 || b === 12) text += String.fromCharCode(b);
+    else return undefined;
+  }
+  return text.replace(/\s+$/, '') + '\n';
+}
+
+/** NAME for an uploaded name.asm: upper case, a letter first, 8 at most. */
+export function programName(file: string): string | undefined {
+  const m = /^([^.]*)\.ASM$/i.exec(file.trim());
+  if (!m) return undefined;
+  let base = m[1].toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (!/^[A-Z]/.test(base)) base = `X${base}`;
+  return base.slice(0, 8);
+}
 
 /** Word wrap for streamed text. */
 class Wrap {
@@ -210,6 +249,10 @@ class AiBoard implements Link {
   private closed = false;
   private abort?: AbortController;
   private sender?: ZmodemSender;
+  private receiver?: ZmodemReceiver;
+  /** The uploaded source to fix, and what ASM said about it. */
+  private fixSource = '';
+  private fixErrors: string[] = [];
   /** The last answer ended in [HANGUP]. */
   private hungUp = false;
   private progName = '';
@@ -231,6 +274,12 @@ class AiBoard implements Link {
     if (this.closed) return;
     const data = this.telnet.strip(bytes);
     if (this.mode === 'zmodem') { this.sender?.receive(data); return; }
+    if (this.mode === 'upload' && this.receiver) {
+      // ESC before the upload starts gives up; after that only ZMODEM's own cancel.
+      if (!this.receiver.started && data.includes(ESC)) { this.receiver.cancel(true); return; }
+      this.receiver.receive(data);
+      return;
+    }
     for (const b of data) this.key(b);
   }
 
@@ -238,6 +287,7 @@ class AiBoard implements Link {
     this.closed = true;
     this.abort?.abort();
     this.sender?.cancel();
+    this.receiver?.cancel(true);
   }
 
   // ---- output --------------------------------------------------------
@@ -308,6 +358,7 @@ class AiBoard implements Link {
       '\r\n  [C] Chat with the AI sysop\r\n' +
       '  [B] Chat with the Bastard Operator From Hell\r\n' +
       '  [P] Order a program (8080 .ASM and .COM by ZMODEM)\r\n' +
+      '  [F] Fix my program (upload your .ASM by ZMODEM)\r\n' +
       '  [K] Forget my API key\r\n' +
       '  [G] Goodbye\r\n\r\nChoice: ',
     );
@@ -328,7 +379,7 @@ class AiBoard implements Link {
       case 'busy':
         if (b === ESC) this.abort?.abort();
         return;
-      case 'bye': case 'zmodem': return;
+      case 'bye': case 'zmodem': case 'upload': return;
       default: return this.lineKey(b);
     }
   }
@@ -346,6 +397,10 @@ class AiBoard implements Link {
         'multiplication table, or a number guessing game).\r\n\r\nProgram: ');
       this.mode = 'describe';
       this.line = '';
+    } else if (c === 'F') {
+      this.say('F\r\n\r\nSend me the .ASM source (64K at most) by ZMODEM: in TERM press Ctrl-],\r\n' +
+        'type ZMODEM S NAME.ASM, then TERM to come back here. ESC gives up.\r\n');
+      this.startUpload();
     } else if (c === 'K') {
       this.deps.setKey(null);
       this.say('K\r\n\r\nKey forgotten.\r\n');
@@ -397,6 +452,10 @@ class AiBoard implements Link {
         this.progText = text;
         this.say('\r\nName for the program, up to 8 letters or digits: ');
         this.mode = 'name';
+        return;
+      case 'fix':
+        this.progText = text || 'Make it assemble without errors and fix any bugs you find.';
+        void this.fixProgram();
         return;
       case 'name': {
         const name = text.toUpperCase();
@@ -500,11 +559,33 @@ class AiBoard implements Link {
 
   private async makeProgram(): Promise<void> {
     const name = this.progName;
+    this.fixSource = '';
     this.say(`\r\nWriting ${name}.ASM with DeepSeek V4.1 Flash. This can take a minute;\r\nESC gives up.\r\n`);
-    const messages: ChatMessage[] = [
+    await this.build(name, [
       { role: 'system', content: PROGRAM_PROMPT },
       { role: 'user', content: `Write a CP/M program called ${name}: ${this.progText}` },
-    ];
+    ]);
+  }
+
+  private async fixProgram(): Promise<void> {
+    const name = this.progName;
+    this.say(`\r\nFixing ${name}.ASM with DeepSeek V4.1 Flash. This can take a minute;\r\nESC gives up.\r\n`);
+    const errors = this.fixErrors.length
+      ? `ASM 2.0 reported these errors (letter, address, line):\n${this.fixErrors.join('\n')}\n${ERROR_LETTERS}`
+      : 'It assembles without errors as it is.';
+    await this.build(name, [
+      { role: 'system', content: FIX_PROMPT },
+      {
+        role: 'user',
+        content: `Here is ${name}.ASM:\n\n${this.fixSource}\n${errors}\n\nThe caller says: ${this.progText}\n` +
+          'Output the whole corrected source, only the source.',
+      },
+    ]);
+    this.fixSource = '';
+  }
+
+  /** Asks for the source, assembles it (errors go back, three tries) and sends it. */
+  private async build(name: string, messages: ChatMessage[]): Promise<void> {
     let source = '';
     let result: AssemblyResult | undefined;
     for (let attempt = 1; attempt <= FIX_TRIES; attempt++) {
@@ -551,7 +632,50 @@ class AiBoard implements Link {
       `\r\nSending ${files.map((f) => f.name).join(' and ')} by ZMODEM now.\r\n` +
       'In TERM press Ctrl-], type ZMODEM R, then TERM to come back here.\r\n',
     );
+    if (this.fixSource) this.say(`ZMODEM R replaces your ${name}.ASM: REN it first to keep the old one.\r\n`);
     this.startZmodem(files);
+  }
+
+  private startUpload(): void {
+    this.mode = 'upload';
+    this.fixSource = '';
+    this.receiver = new ZmodemReceiver((bytes) => this.out([...bytes], false), (ok, files, why) => {
+      this.receiver = undefined;
+      if (this.closed) return;
+      this.mode = 'busy';
+      if (!ok || !files.length) {
+        this.say(`\r\n\r\nNo upload${why ? `: ${why}` : ''}.\r\n`);
+        this.menu();
+        return;
+      }
+      void this.uploaded(files[0]);
+    }, { maxBytes: MAX_UPLOAD_SOURCE, maxFiles: 1, now: this.deps.now });
+    this.runTransfer(this.receiver);
+  }
+
+  private async uploaded(file: ZFile): Promise<void> {
+    const name = programName(file.name);
+    const text = sourceText(file.data);
+    const shown = file.name.toUpperCase().slice(0, 40);
+    if (!name) { this.say(`\r\n\r\n${shown} is not a .ASM file.\r\n`); this.menu(); return; }
+    if (text === undefined) { this.say(`\r\n\r\n${shown} is not a text file.\r\n`); this.menu(); return; }
+    if (!text.trim()) { this.say(`\r\n\r\n${shown} is empty.\r\n`); this.menu(); return; }
+    const lines = text.split('\n').length - 1;
+    this.say(`\r\n\r\nGot ${name}.ASM, ${lines} line${lines === 1 ? '' : 's'}. Assembling it as it is... `);
+    const result = await this.deps.assemble(name, text);
+    if (this.closed) return;
+    this.fixErrors = result.ok ? [] : result.errors;
+    if (result.ok) this.say('no errors.\r\n');
+    else {
+      this.say(`${result.errors.length} error${result.errors.length === 1 ? '' : 's'}:\r\n`);
+      for (const line of result.errors.slice(0, 4)) this.say(`  ${line.slice(0, WIDTH - 2)}\r\n`);
+    }
+    this.progName = name;
+    this.fixSource = text;
+    this.say('\r\nWhat is wrong with it, or what should change? One line; Enter alone\r\n' +
+      'just fixes it.\r\n\r\nFix: ');
+    this.mode = 'fix';
+    this.line = '';
   }
 
   private startZmodem(files: { name: string; data: Uint8Array }[]): void {
@@ -566,16 +690,21 @@ class AiBoard implements Link {
         : `\r\n\r\nTransfer stopped: ${why}.\r\n`);
       this.menu();
     }, now);
-    // Start after the instructions above have gone out at 2400 baud.
+    this.runTransfer(this.sender);
+  }
+
+  /** Starts a transfer once the text before it has gone out at 2400 baud, and ticks it. */
+  private runTransfer(t: { start(): void; tick(): void; readonly finished: boolean }): void {
+    const live = () => !this.closed && !t.finished;
+    const tick = () => {
+      if (!live()) return;
+      t.tick();
+      this.deps.schedule(tick, 1000);
+    };
     const begin = () => {
-      if (this.closed || !this.sender) return;
+      if (!live()) return;
       if (this.queue.length) { this.deps.schedule(begin, 100); return; }
-      this.sender.start();
-      const tick = () => {
-        if (!this.sender || this.closed) return;
-        this.sender.tick();
-        this.deps.schedule(tick, 1000);
-      };
+      t.start();
       this.deps.schedule(tick, 1000);
     };
     begin();

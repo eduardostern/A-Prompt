@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { CpmMachine } from '../src/cpm/machine';
 import { BUILTIN_FILES } from '../src/assets/builtin-programs';
 import type { ConsoleIO } from '../src/console';
-import { BOFH_PICKUP, createAiBoard } from '../src/aiboard';
+import { BOFH_PICKUP, FIX_PROMPT, createAiBoard, programName, sourceText } from '../src/aiboard';
 import { assemble } from '../src/cpm/assembler';
 import type { ChatOptions, ChatChunk } from '../src/deepseek';
 
@@ -189,4 +189,82 @@ describe('AI board', () => {
     expect(b.screen()).not.toContain('is 0 bytes');
     expect(b.screen()).toContain('Sending HELLO3.ASM and HELLO3.COM');
   }, 30_000);
+
+  it('takes an uploaded .ASM by ZMODEM, has it fixed and sends it back', async () => {
+    const b = setup('sk-test');
+    // The caller's program, as CP/M stores it: CR LF, ^Z, padded to a record.
+    const mine = "; my greeting\r\n\tORG\t100H\r\nSTART:\tLD\tC,9\r\n\tLXI\tD,MSG\r\n\tCALL\t5\r\n\tJMP\t0\r\nMSG:\tDB\t'Hi$'\r\n\tEND\tSTART\r\n\x1a";
+    const padded = new Uint8Array(Math.ceil(mine.length / 128) * 128).fill(0x1a);
+    padded.set(Uint8Array.from(mine, (c) => c.charCodeAt(0)));
+    b.machine.disk.put('GREET', 'ASM', padded);
+
+    b.type('ATDT AI\r');
+    await b.waitFor('Choice: ');
+    expect(b.screen()).toContain('[F] Fix my program');
+    b.type('F');
+    await b.waitFor('ZMODEM S NAME.ASM');
+    await b.waitFor('**\x18B01'); // ZRINIT: TERM would say "ZMODEM upload"
+    await b.machine.runCom(b.machine.disk.find(0, 'ZMODEM  ', 'COM')!, 'ZMODEM S GREET.ASM');
+    expect(b.con.output).toContain('Transfer complete');
+    await b.waitFor('Fix: ');
+    expect(b.screen()).toContain('Got GREET.ASM, 8 lines. Assembling it as it is... 1 error:');
+    expect(b.screen()).toMatch(/ {2}[A-Z]\s.*LD\tC,9/); // ASM's error line, shown
+
+    b.answers.push([{ kind: 'text', text: FIXED }]);
+    b.type('make it say Hello from the AI board\r');
+    await b.waitFor('by ZMODEM now');
+    expect(b.calls.length).toBe(1);
+    expect(b.calls[0].thinking).toBe(true);
+    expect(b.calls[0].messages[0]).toEqual({ role: 'system', content: FIX_PROMPT });
+    expect(FIX_PROMPT).toContain('Never Z80 mnemonics'); // the ASM rules stay
+    const ask = b.calls[0].messages[1].content;
+    expect(ask).toContain("Here is GREET.ASM:\n\n; my greeting\n\tORG\t100H\nSTART:\tLD\tC,9\n");
+    expect(ask).not.toMatch(/[\r\x1a]/);
+    expect(ask).toMatch(/ASM 2\.0 reported these errors.*\n[A-Z] .*LD\tC,9/s);
+    expect(ask).toContain('The caller says: make it say Hello from the AI board');
+    expect(b.screen()).toContain('Sending GREET.ASM and GREET.COM');
+    expect(b.screen()).toContain('REN it first');
+
+    await b.machine.runCom(b.machine.disk.find(0, 'ZMODEM  ', 'COM')!, 'ZMODEM R');
+    const asm = String.fromCharCode(...b.machine.disk.find(0, 'GREET   ', 'ASM')!.data);
+    expect(asm).toContain("DB\t'Hello from the AI board'");
+    b.con.output = '';
+    await b.machine.runCom(b.machine.disk.find(0, 'GREET   ', 'COM')!, 'GREET');
+    expect(b.con.output).toContain('Hello from the AI board');
+    await b.waitFor('Run GREET at the A> prompt.');
+  }, 30_000);
+
+  it('refuses uploads that are not .ASM text, and ESC gives up waiting', async () => {
+    const b = setup('sk-test');
+    b.type('ATDT AI\r');
+    await b.waitFor('Choice: ');
+    b.type('F');
+    await b.waitFor('**\x18B01');
+    b.type('\x1b');
+    await b.waitFor('No upload: cancelled.');
+    await b.waitFor('Choice: ');
+
+    b.machine.disk.put('PIC', 'BIN', Uint8Array.from([1, 2, 3]));
+    b.machine.disk.put('BIN', 'ASM', Uint8Array.from([0x09, 0x4f, 0x52, 0x47, 0x00, 0xc3, 0x1a]));
+    b.type('F');
+    await b.waitFor('**\x18B01');
+    await b.machine.runCom(b.machine.disk.find(0, 'ZMODEM  ', 'COM')!, 'ZMODEM S PIC.BIN');
+    await b.waitFor('PIC.BIN is not a .ASM file.');
+    await b.waitFor('Choice: ');
+    b.type('F');
+    await b.waitFor('ESC gives up');
+    await b.machine.runCom(b.machine.disk.find(0, 'ZMODEM  ', 'COM')!, 'ZMODEM S BIN.ASM');
+    await b.waitFor('BIN.ASM is not a text file.');
+    expect(b.calls.length).toBe(0);
+    expect(b.machine.modem.online).toBe(true);
+  }, 30_000);
+
+  it('reads uploaded sources as CP/M text', () => {
+    expect(sourceText(Uint8Array.from('A\r\nB\r\n\x1aJUNK\x00', (c) => c.charCodeAt(0)))).toBe('A\nB\n');
+    expect(sourceText(Uint8Array.from([0x41, 0x00, 0x42]))).toBeUndefined();
+    expect(programName('greet.asm')).toBe('GREET');
+    expect(programName('my-prog.asm')).toBe('MYPROG');
+    expect(programName('1st.ASM')).toBe('X1ST');
+    expect(programName('notes.txt')).toBeUndefined();
+  });
 });

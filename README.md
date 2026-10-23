@@ -159,7 +159,8 @@ keeps games with timing loops playable. **Reset** stops a runaway program
   hang up on you), or order a program: it writes 8080 assembly, the
   bundled ASM and LOAD assemble it in your browser (errors go back to the
   model to fix, up to three tries), and the `.ASM` and `.COM` come down the
-  line by ZMODEM. Bring your own DeepSeek API key.
+  line by ZMODEM. Or upload your own `.ASM` with `ZMODEM S` and say what to
+  fix. Bring your own DeepSeek API key.
 - **Disk images**: mount/export raw 8" SSSD (77×26, standard skew 6 as in
   cpmtools' `ibm-3740` and z80pack), 512K and 4MB `.dsk`/`.img` images, and
   z80pack's 4MB hard disks (`hd-tools.dsk` and friends).
@@ -247,10 +248,18 @@ ATDT DEEPSEEK            CONNECT AI, then the board's menu
   [C] Chat with the AI sysop
   [B] Chat with the Bastard Operator From Hell
   [P] Order a program (8080 .ASM and .COM by ZMODEM)
+  [F] Fix my program (upload your .ASM by ZMODEM)
 P                        "a 10x10 multiplication table", name MULTAB
                          ... thinking, assembling, fixing ...
 Ctrl-]                   then ZMODEM R, then MULTAB
 ```
+
+To fix a program you have, press `F`, then Ctrl-], `ZMODEM S GAME.ASM` and
+`TERM` to go back. The board assembles it as it is, asks what is wrong or
+what to change (Enter alone just fixes the errors), and DeepSeek returns
+the whole corrected source. It goes through the same assemble-and-retry
+loop and comes back as `GAME.ASM` and `GAME.COM` by `ZMODEM R`, replacing
+your copy (`REN` it first to keep the old one). Text sources up to 64K.
 
 The board needs your own DeepSeek API key; calls are billed to your
 DeepSeek account. To get one:
@@ -603,7 +612,7 @@ upload it to a drive and run it.
 | `src/call-sound.ts` | Holds CONNECT and early data until the handshake ends |
 | `src/aiboard.ts` | The AI board: menu, chat, program orders |
 | `src/deepseek.ts` | DeepSeek streaming client (browser, your key) |
-| `src/zmodem.ts` | ZMODEM sender in TypeScript, for the AI board |
+| `src/zmodem.ts` | ZMODEM sender and receiver in TypeScript, for the AI board |
 | `src/cpm/assembler.ts` | ASM + LOAD in a headless CP/M machine |
 | `worker/index.ts` | Cloudflare Worker: WebSocket-to-telnet relay |
 

@@ -154,6 +154,11 @@ user/drive; the CCP restores both from it after each program.
   `src/cpm/assembler.ts` (also used by `scripts/assemble.ts`) runs ASM and
   LOAD headless; error lines go back to the model, three tries; files go
   out with `ZmodemSender` (`src/zmodem.ts`).
+- `[F]` fixes an uploaded program: `ZmodemReceiver` (same file; CRC-16,
+  CRC-32 when offered, ZRPOS from the last good byte) takes one `.ASM` up
+  to 64K from `ZMODEM S`; `sourceText` cuts it at ^Z; the board assembles
+  it, asks what to change, and runs `FIX_PROMPT` (PROGRAM_PROMPT plus "keep
+  the rest") through the same `build()` loop and sender.
 - Chat personas live in `PERSONAS` (`[C]` sysop, `[B]` BOFH, each with its
   own history). The BOFH may end a reply with `[HANGUP]`: the board strips
   it, even split across chunks, and drops the line.
