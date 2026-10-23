@@ -5,7 +5,8 @@
 import type { XtermConsole } from './terminal';
 import {
   DEFAULT_DISPLAY, DisplaySettings, FONTS, FontId, PHOSPHOR_BACKGROUND, PRESETS, Phosphor, SIZES,
-  SCREEN_COLS, SCREEN_ROWS, Scanlines, Signal, fontSize, largestFitting, parseDisplay, terminalTheme, textColor,
+  SCREEN_COLS, SCREEN_ROWS, Scanlines, Signal, displayParam, fontSize, largestFitting, parseDisplay,
+  parseDisplayParam, terminalTheme, textColor,
 } from './display';
 import './fonts/fonts.css';
 
@@ -66,6 +67,23 @@ export function setupDisplay(con: XtermConsole, isNarrow: () => boolean, openCar
   } catch {
     settings = { ...DEFAULT_DISPLAY };
   }
+  // A shared link (?display=amber) shows its look for this visit only.
+  const shared = new URLSearchParams(location.search).get('display');
+  const fromLink = shared ? parseDisplayParam(shared) : undefined;
+  if (fromLink) settings = fromLink;
+
+  const share = $<HTMLButtonElement>('display-share');
+  share.addEventListener('click', async () => {
+    const url = new URL(location.href);
+    url.searchParams.set('display', displayParam(settings));
+    try {
+      await navigator.clipboard.writeText(url.toString());
+      share.textContent = 'Link copied';
+    } catch {
+      window.prompt('Copy this link:', url.toString());
+    }
+    setTimeout(() => { share.textContent = 'Copy link'; }, 1800);
+  });
   let loadId = 0;
 
   /**

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_DISPLAY, MODERN_DISPLAY, PRESETS, fontSize, largestFitting, mix, parseDisplay, terminalTheme } from '../src/display';
+import {
+  DEFAULT_DISPLAY, MODERN_DISPLAY, PRESETS, displayParam, fontSize, largestFitting, mix, parseDisplay,
+  parseDisplayParam, terminalTheme,
+} from '../src/display';
 
 describe('display settings', () => {
   it("a first visit gets Eduardo's look: VT220 at 28 px, white phosphor, no effects", () => {
@@ -90,5 +93,24 @@ describe('auto size', () => {
 
   it('never goes below the smallest size', () => {
     expect(largestFitting(28, 20, 80, 24, screen)).toBe(20);
+  });
+});
+
+describe('display links', () => {
+  it('a preset travels by its name', () => {
+    expect(displayParam(PRESETS.amber.settings)).toBe('amber');
+    expect(parseDisplayParam('amber')).toEqual(PRESETS.amber.settings);
+  });
+
+  it('a custom look travels whole, URL-safe', () => {
+    const custom = { ...PRESETS.amber.settings, background: '#123456', size: 18 };
+    const p = displayParam(custom);
+    expect(p).toMatch(/^x[A-Za-z0-9_-]+$/);
+    expect(parseDisplayParam(p)).toEqual(custom);
+  });
+
+  it('ignores links it cannot read', () => {
+    expect(parseDisplayParam('nonsense')).toBeUndefined();
+    expect(parseDisplayParam('x!!!')).toBeUndefined();
   });
 });

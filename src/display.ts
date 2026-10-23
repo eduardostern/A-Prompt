@@ -148,6 +148,25 @@ export function parseDisplay(json: string | null): DisplaySettings {
   };
 }
 
+/** The `?display=` value for a look: a preset's name, or the settings themselves. */
+export function displayParam(s: DisplaySettings): string {
+  const json = JSON.stringify(s);
+  const preset = Object.keys(PRESETS).find((id) => JSON.stringify(PRESETS[id].settings) === json);
+  if (preset) return preset;
+  return 'x' + btoa(json).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+/** The look a `?display=` value names, or undefined if it names none. */
+export function parseDisplayParam(param: string): DisplaySettings | undefined {
+  if (PRESETS[param]) return { ...PRESETS[param].settings };
+  if (!param.startsWith('x')) return undefined;
+  try {
+    return parseDisplay(atob(param.slice(1).replace(/-/g, '+').replace(/_/g, '/')));
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * The size to use: the chosen one, or the font's own for this width. On a
  * narrow screen a chosen size is capped at the font's own phone size, so the

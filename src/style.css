@@ -1208,6 +1208,7 @@ body { overflow: hidden; }
 
 .display-presets { display: flex; flex-wrap: wrap; gap: 6px; }
 .display-presets .chip.active { color: var(--green); border-color: var(--green-2); }
+.display-share { margin-top: 8px; }
 
 .display-grid {
   display: grid;

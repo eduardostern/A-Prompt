@@ -65,6 +65,7 @@ Zork, WordStar and MBASIC from your own archive.
   VT220, VT323, IBM VGA), green, amber or white phosphor, any background,
   and adds scanlines, phosphor glow, flicker, curved glass, magnetic
   interference and NTSC or PAL colour fringes with a rolling hum bar.
+  Share a look with a link: `?display=amber`, or Copy link for your own.
   It starts switched off: a key or click powers it on, with the degauss
   thunk, the picture opening from a bright line, and the boot bell.
 - **Serial terminal speed.** Set the line to 300, 1200, 2400, 9600 or
