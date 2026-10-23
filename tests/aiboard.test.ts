@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { CpmMachine } from '../src/cpm/machine';
 import { BUILTIN_FILES } from '../src/assets/builtin-programs';
 import type { ConsoleIO } from '../src/console';
-import { createAiBoard } from '../src/aiboard';
+import { BOFH_PICKUP, createAiBoard } from '../src/aiboard';
 import { assemble } from '../src/cpm/assembler';
 import type { ChatOptions, ChatChunk } from '../src/deepseek';
 
@@ -96,16 +96,21 @@ describe('AI board', () => {
     b.type('ATDT DEEPSEEK\r');
     await b.waitFor('Choice: ');
     expect(b.screen()).toContain('[B] Chat with the Bastard Operator From Hell');
+    b.answers.push([{ kind: 'text', text: '(click) Machine room. What.' }]);
     b.answers.push([{ kind: 'text', text: 'Your password? Of course. Spell it slowly.' }]);
     b.answers.push([
       { kind: 'text', text: 'Solar flares on your RS-232 line. Goodbye.\n[HAN' },
       { kind: 'text', text: 'GUP]' },
     ]);
     b.type('B');
-    await b.waitFor('night shift');
+    // He picks up before the caller says anything.
+    await b.waitFor('BOFH> (click) Machine room. What.');
+    expect(b.calls[0].messages[0].content).toContain('Bastard Operator From Hell');
+    expect(b.calls[0].messages[0].content).toContain('PFY');
+    expect(b.calls[0].messages.at(-1)).toEqual({ role: 'user', content: BOFH_PICKUP });
+    await b.waitFor('You> ');
     b.type('I forgot my password\r');
     await b.waitFor('BOFH> Your password? Of course. Spell it slowly.');
-    expect(b.calls[0].messages[0].content).toContain('Bastard Operator From Hell');
     b.type('it still does not work\r');
     await b.waitFor('NO CARRIER');
     const screen = b.screen();
@@ -123,9 +128,8 @@ describe('AI board', () => {
     b.answers.push([{ kind: 'text', text: 'Grr.' }]);
     b.answers.push([{ kind: 'text', text: 'Hello! [HANGUP] is just text here.' }]);
     b.type('B');
-    await b.waitFor('You> ');
-    b.type('hi\r');
     await b.waitFor('BOFH> Grr.');
+    await b.waitFor('You> ');
     b.type('/menu\r');
     await b.waitFor('[G] Goodbye');
     b.type('C');
@@ -133,6 +137,7 @@ describe('AI board', () => {
     b.type('hello\r');
     await b.waitFor('AI> Hello! [HANGUP] is just text here.');
     expect(b.machine.modem.online).toBe(true);
+    expect(b.calls.length).toBe(2);
     expect(b.calls[1].messages).toEqual([
       expect.objectContaining({ role: 'system' }),
       { role: 'user', content: 'hello' },

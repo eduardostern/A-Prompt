@@ -198,10 +198,13 @@ through the A-Prompt Worker). Anyone using the same browser profile can use
 it: press Forget, or delete the key on DeepSeek's API keys page, to revoke
 it. ESC stops an answer; text arrives at an emulated 2400 baud.
 
-The night-shift operator behind `[B]` is played in the spirit of Simon
-Travaglia's *Bastard Operator From Hell* stories: original lines, no
-quotes from the stories. Annoy him enough and he ends his reply with a
-click and drops your carrier.
+`[B]` rings the machine room of the Bastard Operator From Hell, played as
+close to Simon Travaglia's character as the model can manage: the PFY in
+asides, the Boss and the Beancounters, the excuse calendar, "What's your
+username?", the Halon button. He picks up the phone himself, as the
+stories begin, and the scenes are new: nothing is quoted from the
+stories. Annoy him enough and he ends his reply with a click and drops
+your carrier.
 
 ## Running games
 
