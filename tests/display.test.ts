@@ -2,8 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_DISPLAY, MODERN_DISPLAY, PRESETS, fontSize, mix, parseDisplay, terminalTheme } from '../src/display';
 
 describe('display settings', () => {
-  it('a first visit gets the green CRT', () => {
-    expect(DEFAULT_DISPLAY).toEqual(PRESETS.green.settings);
+  it("a first visit gets Eduardo's look: VT220 at 28 px, white phosphor, no effects", () => {
+    expect(DEFAULT_DISPLAY).toEqual(PRESETS.eduardo.settings);
+    expect(DEFAULT_DISPLAY).toMatchObject({
+      font: 'glass', size: 0, phosphor: 'white', scanlines: 'light', signal: 'rgb',
+      glow: false, flicker: false, curve: false, interference: false,
+    });
   });
 
   it('falls back to the default look for missing or broken storage', () => {
@@ -29,8 +33,13 @@ describe('display settings', () => {
   it('auto size follows the font and the screen width', () => {
     expect(fontSize(MODERN_DISPLAY, false)).toBe(15);
     expect(fontSize(MODERN_DISPLAY, true)).toBe(12);
-    expect(fontSize(DEFAULT_DISPLAY, false)).toBe(20);
-    expect(fontSize({ ...DEFAULT_DISPLAY, font: 'glass', size: 24 }, true)).toBe(24);
+    expect(fontSize(DEFAULT_DISPLAY, false)).toBe(28);
+    expect(fontSize(DEFAULT_DISPLAY, true)).toBe(16);
+    // A chosen size that would leave a phone too few columns is capped.
+    expect(fontSize(PRESETS.green.settings, false)).toBe(20);
+    expect(fontSize(PRESETS.green.settings, true)).toBe(16);
+    expect(fontSize({ ...DEFAULT_DISPLAY, size: 14 }, true)).toBe(14);
+    expect(fontSize({ ...DEFAULT_DISPLAY, font: 'glass', size: 24 }, false)).toBe(24);
   });
 
   it('a monochrome phosphor shows every ANSI colour as a shade of itself', () => {

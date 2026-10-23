@@ -40,7 +40,7 @@ const FALLBACK = "Menlo, Consolas, 'DejaVu Sans Mono', monospace";
 
 export const FONTS: Record<FontId, FontInfo> = {
   modern: { label: 'Modern', family: `'JetBrains Mono', 'IBM Plex Mono', ${FALLBACK}`, auto: [15, 12], lineHeight: 1.25 },
-  glass: { label: 'DEC VT220 (Glass TTY)', family: `'Glass TTY VT220', ${FALLBACK}`, auto: [20, 16], lineHeight: 1.0 },
+  glass: { label: 'DEC VT220 (Glass TTY)', family: `'Glass TTY VT220', ${FALLBACK}`, auto: [28, 16], lineHeight: 1.0 },
   vt323: { label: 'VT323', family: `'VT323', ${FALLBACK}`, auto: [22, 17], lineHeight: 1.0 },
   vga: { label: 'IBM PC VGA', family: `'IBM VGA 8x16', ${FALLBACK}`, auto: [16, 16], lineHeight: 1.0 },
 };
@@ -77,11 +77,18 @@ const PHOSPHOR_RGB: Record<Exclude<Phosphor, 'color'>, string> = {
 };
 
 export const PRESETS: Record<string, { label: string; short: string; settings: DisplaySettings }> = {
+  eduardo: {
+    label: "Eduardo's", short: 'Eduardo',
+    settings: {
+      font: 'glass', size: 0, phosphor: 'white', background: PHOSPHOR_BACKGROUND.white,
+      scanlines: 'light', glow: false, flicker: false, curve: false, interference: false, signal: 'rgb',
+    },
+  },
   modern: { label: 'Modern', short: 'Modern', settings: MODERN_DISPLAY },
   green: {
     label: 'Green CRT', short: 'Green',
     settings: {
-      font: 'glass', size: 0, phosphor: 'green', background: PHOSPHOR_BACKGROUND.green,
+      font: 'glass', size: 20, phosphor: 'green', background: PHOSPHOR_BACKGROUND.green,
       scanlines: 'heavy', glow: true, flicker: true, curve: true, interference: false, signal: 'ntsc',
     },
   },
@@ -102,14 +109,14 @@ export const PRESETS: Record<string, { label: string; short: string; settings: D
   worn: {
     label: 'Worn out', short: 'Worn',
     settings: {
-      font: 'glass', size: 0, phosphor: 'white', background: PHOSPHOR_BACKGROUND.white,
+      font: 'glass', size: 20, phosphor: 'white', background: PHOSPHOR_BACKGROUND.white,
       scanlines: 'heavy', glow: true, flicker: true, curve: true, interference: true, signal: 'ntsc',
     },
   },
 };
 
-/** What a first visit shows: the green CRT. */
-export const DEFAULT_DISPLAY: DisplaySettings = PRESETS.green.settings;
+/** What a first visit shows: Eduardo's choice. */
+export const DEFAULT_DISPLAY: DisplaySettings = PRESETS.eduardo.settings;
 
 const pick = <T extends string>(value: unknown, allowed: readonly T[], fallback: T): T =>
   allowed.includes(value as T) ? (value as T) : fallback;
@@ -139,9 +146,15 @@ export function parseDisplay(json: string | null): DisplaySettings {
   };
 }
 
-/** The size to use: the chosen one, or the font's own for this width. */
+/**
+ * The size to use: the chosen one, or the font's own for this width. On a
+ * narrow screen a chosen size is capped at the font's own phone size, so the
+ * screen keeps enough columns.
+ */
 export function fontSize(s: DisplaySettings, narrow: boolean): number {
-  return s.size || FONTS[s.font].auto[narrow ? 1 : 0];
+  const auto = FONTS[s.font].auto[narrow ? 1 : 0];
+  if (!s.size) return auto;
+  return narrow ? Math.min(s.size, auto) : s.size;
 }
 
 function rgb(hex: string): [number, number, number] {
