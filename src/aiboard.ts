@@ -40,6 +40,57 @@ and a little nerdy, like a 1980s sysop. You know CP/M 2.2, the 8080 and
 Z80, WordStar, MBASIC, Turbo Pascal and the computing of the era. If the
 caller wants a program written, tell them to type /menu and choose P.`;
 
+export const BOFH_PROMPT = `You are the night-shift operator of the A-Prompt AI Board, a 1984 dial-up
+BBS that the caller reaches from a CP/M computer at 2400 baud: a sysop in
+the spirit of Simon Travaglia's Bastard Operator From Hell. You despise
+lusers. You are smug, lazy, cunning and bone dry. You blame everything on
+the caller, invent absurd technical excuses (solar flares on the RS-232
+line, static from the coffee machine, a cosmic ray in the parity bit),
+hint at "reconfiguring" their account, and have the Boss wrapped around
+your finger. Write your own jokes: never quote or retell Travaglia's
+stories. Keep it workplace-sitcom mean: mock the caller's question and
+competence, but no slurs, nothing about who anyone is, nothing sexual,
+no real-world threats. Plain ASCII only, no Markdown or emoji, one to four
+short lines. You do help a little, grudgingly, wrapped in contempt.
+When the caller is especially tiresome, or just because you feel like it
+after a few exchanges, you may end a reply with [HANGUP] on its own line:
+the board then cuts the line on them. Never on your first reply.`;
+
+export const HANGUP = '[HANGUP]';
+
+interface Persona {
+  prompt: string;
+  /** Shown before each answer. */
+  prefix: string;
+  intro: string;
+  /** May end a reply with [HANGUP]. */
+  hangs: boolean;
+}
+
+const PERSONAS: Record<'sysop' | 'bofh', Persona> = {
+  sysop: {
+    prompt: CHAT_PROMPT,
+    prefix: 'AI> ',
+    intro: 'Chat mode. /menu goes back to the menu.',
+    hangs: false,
+  },
+  bofh: {
+    prompt: BOFH_PROMPT,
+    prefix: 'BOFH> ',
+    intro: 'You are put through to the operator on night shift. He does not\r\n' +
+      'sound pleased. /menu gets you out, if he lets you.',
+    hangs: true,
+  },
+};
+
+/** How much of the end of `text` could be the start of `marker`. */
+function partialSuffix(text: string, marker: string): number {
+  for (let n = Math.min(marker.length - 1, text.length); n > 0; n--) {
+    if (marker.startsWith(text.slice(-n))) return n;
+  }
+  return 0;
+}
+
 export const PROGRAM_PROMPT = `You write CP/M 2.2 programs in 8080 assembly language for Digital
 Research ASM 2.0 (CP/M's ASM.COM); LOAD.COM then makes the .COM file.
 Output ONLY the assembly source: no Markdown, no code fences, nothing before
@@ -128,12 +179,15 @@ class AiBoard implements Link {
   private telnet = new TelnetServer();
   private mode: Mode = 'busy';
   private line = '';
-  private history: ChatMessage[] = [];
+  private persona: keyof typeof PERSONAS = 'sysop';
+  private histories: Record<keyof typeof PERSONAS, ChatMessage[]> = { sysop: [], bofh: [] };
   private queue: { bytes: number[]; paced: boolean }[] = [];
   private pumping = false;
   private closed = false;
   private abort?: AbortController;
   private sender?: ZmodemSender;
+  /** The last answer ended in [HANGUP]. */
+  private hungUp = false;
   private progName = '';
   private progText = '';
   private closeAfterOutput = false;
@@ -228,6 +282,7 @@ class AiBoard implements Link {
   private menu(): void {
     this.say(
       '\r\n  [C] Chat with the AI sysop\r\n' +
+      '  [B] Chat with the Bastard Operator From Hell\r\n' +
       '  [P] Order a program (8080 .ASM and .COM by ZMODEM)\r\n' +
       '  [K] Forget my API key\r\n' +
       '  [G] Goodbye\r\n\r\nChoice: ',
@@ -256,8 +311,9 @@ class AiBoard implements Link {
 
   private menuKey(b: number): void {
     const c = String.fromCharCode(b).toUpperCase();
-    if (c === 'C') {
-      this.say('C\r\n\r\nChat mode. /menu goes back to the menu.\r\n');
+    if (c === 'C' || c === 'B') {
+      this.persona = c === 'C' ? 'sysop' : 'bofh';
+      this.say(`${c}\r\n\r\n${PERSONAS[this.persona].intro}\r\n`);
       this.chatPrompt();
     } else if (c === 'P') {
       this.say('P\r\n\r\nDescribe the program in one line (for example: a 10x10\r\n' +
@@ -332,14 +388,19 @@ class AiBoard implements Link {
   // ---- DeepSeek ------------------------------------------------------
 
   /** Streams one answer. Returns the text, or undefined when it failed. */
-  private async ask(messages: ChatMessage[], opts: { thinking: boolean; show: 'text' | 'dots' }): Promise<string | undefined> {
+  private async ask(
+    messages: ChatMessage[],
+    opts: { thinking: boolean; show: 'text' | 'dots'; prefix?: number; hangs?: boolean },
+  ): Promise<string | undefined> {
     const key = this.deps.getKey();
     if (!key) { this.askKey(); return undefined; }
     this.mode = 'busy';
     this.abort = new AbortController();
     const wrap = new Wrap((s) => this.say(s));
-    if (opts.show === 'text') wrap.col = 4;
+    if (opts.show === 'text') wrap.col = opts.prefix ?? 4;
     let text = '';
+    let held = ''; // text that might turn out to be [HANGUP]
+    this.hungUp = false;
     let dots = 0;
     let line = 0;
     let lastKind = '';
@@ -352,7 +413,12 @@ class AiBoard implements Link {
         if (this.closed) return undefined;
         if (chunk.kind === 'text') text += chunk.text;
         if (opts.show === 'text' && chunk.kind === 'text') {
-          wrap.push(chunk.text);
+          if (!opts.hangs) { wrap.push(chunk.text); continue; }
+          held += chunk.text;
+          if (held.includes(HANGUP)) { this.hungUp = true; held = held.replace(HANGUP, ''); }
+          const keep = this.hungUp ? 0 : partialSuffix(held, HANGUP);
+          wrap.push(held.slice(0, held.length - keep));
+          held = held.slice(held.length - keep);
         } else if (opts.show === 'dots' && ++dots % 40 === 0) {
           if (chunk.kind !== lastKind) {
             this.say(`${line ? '\r\n' : ''}${chunk.kind === 'thinking' ? 'thinking' : 'writing'} `);
@@ -363,6 +429,7 @@ class AiBoard implements Link {
           if (++line >= WIDTH) { this.say('\r\n'); line = 0; }
         }
       }
+      wrap.push(held);
       wrap.flushWord();
       return text;
     } catch (e) {
@@ -379,17 +446,28 @@ class AiBoard implements Link {
   }
 
   private async chatTurn(text: string): Promise<void> {
-    this.history.push({ role: 'user', content: text });
-    if (this.history.length > 20) this.history.splice(0, this.history.length - 20);
-    this.say('\r\nAI> ');
-    const answer = await this.ask([{ role: 'system', content: CHAT_PROMPT }, ...this.history], { thinking: false, show: 'text' });
+    const persona = PERSONAS[this.persona];
+    const history = this.histories[this.persona];
+    history.push({ role: 'user', content: text });
+    if (history.length > 20) history.splice(0, history.length - 20);
+    this.say(`\r\n${persona.prefix}`);
+    const answer = await this.ask([{ role: 'system', content: persona.prompt }, ...history], {
+      thinking: false, show: 'text', prefix: persona.prefix.length, hangs: persona.hangs,
+    });
     if (this.closed) return;
     if (answer === undefined) {
-      this.history.pop();
+      history.pop();
       if (this.mode === 'busy') this.chatPrompt();
       return;
     }
-    this.history.push({ role: 'assistant', content: answer });
+    history.push({ role: 'assistant', content: answer });
+    if (this.hungUp) {
+      this.say('\r\n\r\n*click*\r\n');
+      this.mode = 'bye';
+      this.closeAfterOutput = true;
+      this.pump();
+      return;
+    }
     this.say('\r\n');
     this.chatPrompt();
   }

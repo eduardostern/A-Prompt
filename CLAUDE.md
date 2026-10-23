@@ -135,6 +135,9 @@ user/drive; the CCP restores both from it after each program.
   `src/cpm/assembler.ts` (also used by `scripts/assemble.ts`) runs ASM and
   LOAD headless; error lines go back to the model, three tries; files go
   out with `ZmodemSender` (`src/zmodem.ts`).
+- Chat personas live in `PERSONAS` (`[C]` sysop, `[B]` BOFH, each with its
+  own history). The BOFH may end a reply with `[HANGUP]`: the board strips
+  it, even split across chunks, and drops the line.
 - Tests use a fake `chat` and `cps: 0` (`tests/aiboard.test.ts`); no test
   calls DeepSeek.
 

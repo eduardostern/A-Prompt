@@ -91,6 +91,54 @@ describe('AI board', () => {
     await b.waitFor('NO CARRIER');
   });
 
+  it('puts you through to the BOFH, who may hang up on you', async () => {
+    const b = setup('sk-test');
+    b.type('ATDT DEEPSEEK\r');
+    await b.waitFor('Choice: ');
+    expect(b.screen()).toContain('[B] Chat with the Bastard Operator From Hell');
+    b.answers.push([{ kind: 'text', text: 'Your password? Of course. Spell it slowly.' }]);
+    b.answers.push([
+      { kind: 'text', text: 'Solar flares on your RS-232 line. Goodbye.\n[HAN' },
+      { kind: 'text', text: 'GUP]' },
+    ]);
+    b.type('B');
+    await b.waitFor('night shift');
+    b.type('I forgot my password\r');
+    await b.waitFor('BOFH> Your password? Of course. Spell it slowly.');
+    expect(b.calls[0].messages[0].content).toContain('Bastard Operator From Hell');
+    b.type('it still does not work\r');
+    await b.waitFor('NO CARRIER');
+    const screen = b.screen();
+    expect(screen).toContain('BOFH> Solar flares on your RS-232 line. Goodbye.');
+    expect(screen).toContain('*click*');
+    expect(screen).not.toContain('HANGUP');
+    expect(screen).not.toContain('[HAN');
+    expect(b.machine.modem.online).toBe(false);
+  });
+
+  it('the friendly sysop cannot hang up, and has a separate history', async () => {
+    const b = setup('sk-test');
+    b.type('ATDT DEEPSEEK\r');
+    await b.waitFor('Choice: ');
+    b.answers.push([{ kind: 'text', text: 'Grr.' }]);
+    b.answers.push([{ kind: 'text', text: 'Hello! [HANGUP] is just text here.' }]);
+    b.type('B');
+    await b.waitFor('You> ');
+    b.type('hi\r');
+    await b.waitFor('BOFH> Grr.');
+    b.type('/menu\r');
+    await b.waitFor('[G] Goodbye');
+    b.type('C');
+    await b.waitFor('Chat mode');
+    b.type('hello\r');
+    await b.waitFor('AI> Hello! [HANGUP] is just text here.');
+    expect(b.machine.modem.online).toBe(true);
+    expect(b.calls[1].messages).toEqual([
+      expect.objectContaining({ role: 'system' }),
+      { role: 'user', content: 'hello' },
+    ]);
+  });
+
   it('writes a program, fixes its assembly errors and sends it by ZMODEM', async () => {
     const b = setup('sk-test');
     b.type('ATDT AI\r');

@@ -85,7 +85,8 @@ keeps games with timing loops playable. **Reset** stops a runaway program
   and 1K blocks) and `ZMODEM.COM` (CRC-16, batch receive, restart from the
   last good byte after an error), both tested against lrzsz.
 - **AI board**: `ATDT DEEPSEEK` calls a BBS whose sysop is DeepSeek V4.1
-  Flash. Chat with it, or order a program: it writes 8080 assembly, the
+  Flash. Chat with it, or with the Bastard Operator From Hell (who may
+  hang up on you), or order a program: it writes 8080 assembly, the
   bundled ASM and LOAD assemble it in your browser (errors go back to the
   model to fix, up to three tries), and the `.ASM` and `.COM` come down the
   line by ZMODEM. Bring your own DeepSeek API key.
@@ -171,6 +172,7 @@ CP/M 3 `T_GET` clock (BDOS 105).
 A>TERM
 ATDT DEEPSEEK            CONNECT AI, then the board's menu
   [C] Chat with the AI sysop
+  [B] Chat with the Bastard Operator From Hell
   [P] Order a program (8080 .ASM and .COM by ZMODEM)
 P                        "a 10x10 multiplication table", name MULTAB
                          ... thinking, assembling, fixing ...
@@ -195,6 +197,11 @@ The key is kept in this browser's localStorage and sent only to
 through the A-Prompt Worker). Anyone using the same browser profile can use
 it: press Forget, or delete the key on DeepSeek's API keys page, to revoke
 it. ESC stops an answer; text arrives at an emulated 2400 baud.
+
+The night-shift operator behind `[B]` is played in the spirit of Simon
+Travaglia's *Bastard Operator From Hell* stories: original lines, no
+quotes from the stories. Annoy him enough and he ends his reply with a
+click and drops your carrier.
 
 ## Running games
 
