@@ -11,6 +11,7 @@ import { withCallSound } from './call-sound';
 import { audioContext } from './audio';
 import { setupDisplay } from './display-ui';
 import { askConfirm } from './confirm';
+import { waitForPower, warmUp } from './power';
 import { startCallSound } from './modem-audio';
 import { assemble } from './cpm/assembler';
 import { streamChat } from './deepseek';
@@ -936,6 +937,11 @@ resetMachine.addEventListener('click', async () => {
     return;
   }
   saveAllDrives();
+  try {
+    sessionStorage.setItem(WARM_KEY, '1');
+  } catch {
+    /* ignore: the power switch shows again */
+  }
   window.location.reload();
 });
 
@@ -983,8 +989,32 @@ window.setInterval(() => {
 }, 1000);
 statusText.textContent = 'READY';
 con.focus();
-// Browsers keep audio paused until the first click or key; the power-on bell
-// waits on the paused clock and sounds then.
+// ---- power ------------------------------------------------------------
+
+// A fresh visit starts with the machine off: browsers allow sound only after
+// a click or key, and that is the power switch, so the boot bell rings. Reset
+// reboots without it, and so does a visitor who ticks "Power on by itself".
+const AUTO_POWER_KEY = 'a-prompt.autopower';
+const WARM_KEY = 'a-prompt.warm-reboot';
+const autoPower = el<HTMLInputElement>('auto-power');
+autoPower.checked = localStorage.getItem(AUTO_POWER_KEY) === '1';
+autoPower.addEventListener('change', () => {
+  try {
+    if (autoPower.checked) localStorage.setItem(AUTO_POWER_KEY, '1');
+    else localStorage.removeItem(AUTO_POWER_KEY);
+  } catch {
+    /* ignore */
+  }
+});
+let warmReboot = false;
+try {
+  warmReboot = sessionStorage.getItem(WARM_KEY) === '1';
+  sessionStorage.removeItem(WARM_KEY);
+} catch {
+  /* ignore */
+}
+
+// Without the switch, the bell waits for the first click or key.
 const wakeAudio = () => {
   audioContext();
   window.removeEventListener('pointerdown', wakeAudio, true);
@@ -992,8 +1022,19 @@ const wakeAudio = () => {
 };
 window.addEventListener('pointerdown', wakeAudio, true);
 window.addEventListener('keydown', wakeAudio, true);
-requestAnimationFrame(() => {
+
+requestAnimationFrame(async () => {
   con.fit();
+  if (!warmReboot && !autoPower.checked) {
+    const wrap = el('terminal-wrap');
+    statusText.textContent = 'OFF';
+    document.body.classList.add('machine-off');
+    await waitForPower(wrap);
+    document.body.classList.remove('machine-off');
+    statusText.textContent = 'READY';
+    await warmUp(wrap);
+  }
+  con.focus();
   machine.start().catch((err: unknown) => {
     con.write(`\r\n* Failed to start: ${err instanceof Error ? err.message : String(err)}\r\n`);
   });

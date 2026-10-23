@@ -65,6 +65,8 @@ Zork, WordStar and MBASIC from your own archive.
   VT220, VT323, IBM VGA), green, amber or white phosphor, any background,
   and adds scanlines, phosphor glow, flicker, curved glass, magnetic
   interference and NTSC or PAL colour fringes with a rolling hum bar.
+  It starts switched off: a key or click powers it on, with the degauss
+  thunk, the picture opening from a bright line, and the boot bell.
 - **Real disks.** Mount and export 8" SSSD, 512K, 4 MB and z80pack hard
   disk images; four drives saved in your browser.
 - **Built by AIs for under $1, then finished properly.** See

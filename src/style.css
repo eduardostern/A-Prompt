@@ -1300,3 +1300,63 @@ body { overflow: hidden; }
   background: rgba(94, 224, 143, 0.16);
   outline: none;
 }
+
+/* ---- power switch and warm-up (src/power.ts) -------------------------- */
+
+.power-off .terminal { visibility: hidden; }
+.machine-off .led { background: #26332b; box-shadow: none; }
+
+.power-switch {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  border: 0;
+  background: transparent;
+  color: var(--phosphor, var(--green));
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  opacity: 0.75;
+}
+.power-switch:hover, .power-switch:focus-visible { opacity: 1; outline: none; }
+.power-icon {
+  font-size: 42px;
+  line-height: 1;
+  text-shadow: 0 0 14px currentColor;
+  animation: power-pulse 2.4s ease-in-out infinite;
+}
+@keyframes power-pulse { 50% { opacity: 0.4; } }
+
+/* The picture opens: a dot, a bright line, then the full raster fading in. */
+.crt-on {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, #fff 0%, var(--phosphor, #9dffbe) 45%, transparent 75%);
+  animation: crt-on 1.3s cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+}
+@keyframes crt-on {
+  0% { transform: scale(0.01, 0.004); opacity: 1; }
+  25% { transform: scale(1, 0.004); opacity: 1; }
+  45% { transform: scale(1, 1); opacity: 0.55; }
+  100% { transform: scale(1, 1); opacity: 0; }
+}
+
+.display-power {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+}
+.display-power input { accent-color: var(--green); margin-top: 2px; }
