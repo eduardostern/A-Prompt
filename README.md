@@ -188,7 +188,8 @@ keeps games with timing loops playable. **Reset** stops a runaway program
 Bundled programs: **PIP**, **STAT**, **DDT**, **ED**, **ASM**, **LOAD**,
 **SUBMIT**, **DUMP**, **HELLO.COM**, **INPUT.COM**, **COLOR.COM** (shows the
 ANSI palette), **TETRIS.COM** (a colour Tetris for the ANSI terminal),
-**JOSHUA.COM** (WOPR's tic-tac-toe from *WarGames*: try zero players),
+**JOSHUA.COM** (WOPR's tic-tac-toe from *WarGames*: try zero players; ordered
+from the AI board with `ATDT DEEPSEEK` and written by DeepSeek V4.1 Flash),
 **TERM.COM** (a terminal for the telnet modem), **XMODEM.COM** and
 **ZMODEM.COM** (file transfer over it), with their 8080 sources, plus
 **DEMO.SUB** and **XSUB.SUB**.
@@ -722,8 +723,10 @@ A-Prompt was designed and built by Eduardo Stern. See `AUTHORS`.
 - CP/M binaries: © Digital Research, redistributed under the license granted
   by DRDOS, Inc. / Bryan Sparks, available at
   [cpm.z80.de/license.html](http://www.cpm.z80.de/license.html).
-- `HELLO`, `COLOR`, `TETRIS`, `JOSHUA`, `TERM`, `XMODEM`, `ZMODEM` (`.COM` and `.ASM`) and `DEMO.SUB` are original
+- `HELLO`, `COLOR`, `TETRIS`, `TERM`, `XMODEM`, `ZMODEM` (`.COM` and `.ASM`) and `DEMO.SUB` are original
   examples for this project, assembled with the bundled ASM and LOAD.
+- `JOSHUA` (`.COM` and `.ASM`) was ordered by Eduardo Stern from the AI board
+  inside A-Prompt (`ATDT DEEPSEEK`, then `P`) and written by DeepSeek V4.1 Flash.
 - xterm.js, fflate and other dependencies retain their own MIT licenses.
 - Terminal fonts (`src/fonts/`, unmodified): Glass TTY VT220 by Viacheslav
   Slavinsky (public domain); VT323 by Peter Hull (SIL OFL 1.1); IBM VGA 8x16
