@@ -49,6 +49,23 @@ export class CpmMachine {
   sleepFn: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms));
   /** Target Z80 clock in Hz; 0 runs as fast as the host allows. */
   clockHz = 0;
+  /** Drive time (ms) the program still has to wait, when drives run at the era's speed. */
+  private diskDebt = 0;
+
+  /** Adds drive time to wait for. */
+  owe(ms: number): void {
+    this.diskDebt += ms;
+  }
+
+  /** Waits out the drive time owed. */
+  async payDisk(): Promise<void> {
+    while (this.diskDebt >= 1) {
+      const ms = Math.min(this.diskDebt, 100);
+      this.diskDebt -= ms;
+      await this.sleepFn(ms);
+    }
+  }
+
   /** Wall-clock milliseconds since the epoch for the BDOS clock; tests substitute a fake. */
   now: () => number = () => Date.now();
 
@@ -257,7 +274,10 @@ export class CpmMachine {
   async runCom(file: CpmFile, line: string): Promise<void> {
     // The CCP reads the directory, then the program a track at a time.
     this.bdos.touch(null, 0, false);
-    for (let r = 0; r * 128 < file.data.length; r += 26) this.bdos.touch(file, r, false);
+    for (let r = 0; r * 128 < file.data.length; r += 26) {
+      this.bdos.touch(file, r, false, Math.min(26, Math.ceil(file.data.length / 128) - r));
+    }
+    await this.payDisk();
     const m = this.mem;
     const command = line.split(' ')[0];
     const tail = line.slice(command.length).slice(0, 127);
@@ -310,6 +330,8 @@ export class CpmMachine {
           const before = performance.now();
           if (pc === BDOS_ENTRY) await this.bdos.handle();
           else if (await this.biosTrap(pc)) break;
+          // A drive of the era holds the program until the access is done.
+          if (this.diskDebt >= 4) await this.payDisk();
           // A slow serial line holds the program until its output is sent.
           const lineWait = this.console.outputDelay?.() ?? 0;
           if (lineWait > 1) await this.sleepFn(Math.min(lineWait, 100));
@@ -427,7 +449,7 @@ export class CpmMachine {
         break;
       case 13: { // READ
         const disk = this.drives[this.biosDisk];
-        this.bdos.onDisk?.(this.biosTrack, false);
+        this.bdos.onDisk?.(this.biosDisk, this.biosTrack, false, 1);
         const sector = disk?.image?.readSector(this.biosTrack, this.biosSector);
         if (!sector) { cpu.a = 1; break; }
         // The DMA address may be any byte address; the transfer wraps at FFFFh.
@@ -440,7 +462,7 @@ export class CpmMachine {
         if (!disk?.image) { cpu.a = 1; break; }
         const bytes = new Uint8Array(128);
         for (let i = 0; i < 128; i++) bytes[i] = this.mem[(this.biosDma + i) & 0xffff];
-        this.bdos.onDisk?.(this.biosTrack, true);
+        this.bdos.onDisk?.(this.biosDisk, this.biosTrack, true, 1);
         const ok = disk.image.writeSector(this.biosTrack, this.biosSector, bytes);
         if (!ok) { cpu.a = 1; break; }
         disk.imageDirty = true;

@@ -79,12 +79,12 @@ export class Ccp {
     }
 
     switch (cmd) {
-      case 'DIR': this.bdos.touch(null, 0, false); return this.dir(arg);
-      case 'ERA': this.bdos.touch(null, 0, true); return this.era(arg);
-      case 'TYPE': this.bdos.touch(null, 0, false); return this.type(arg);
-      case 'REN': this.bdos.touch(null, 0, true); return this.ren(arg);
+      case 'DIR': await this.directory(false); return this.dir(arg);
+      case 'ERA': await this.directory(true); return this.era(arg);
+      case 'TYPE': await this.directory(false); return this.type(arg);
+      case 'REN': await this.directory(true); return this.ren(arg);
       case 'USER': return this.user(arg);
-      case 'SAVE': this.bdos.touch(null, 0, true); return this.save(arg);
+      case 'SAVE': await this.directory(true); return this.save(arg);
       case 'XSUB': return this.xsub(arg);
       case 'DATE': return this.date();
       case 'CLS': this.console.write('\x1b[2J\x1b[H'); return;
@@ -118,6 +118,12 @@ export class Ccp {
     }
     await this.machine.runCom(file, line);
     this.machine.refresh();
+  }
+
+  /** The built-in commands go to the directory first (sounds, drive time). */
+  private async directory(write: boolean): Promise<void> {
+    this.bdos.touch(null, 0, write);
+    await this.machine.payDisk();
   }
 
   private dir(arg: string): void {
@@ -154,7 +160,7 @@ export class Ccp {
     if (!deleted) this.console.write('NO FILE\r\n');
   }
 
-  private type(arg: string): void {
+  private async type(arg: string): Promise<void> {
     if (!arg) { this.console.write('TYPE?\r\n'); return; }
     const parsed = parseName(arg);
     if (!parsed || parsed.name.includes('?')) { this.console.write('TYPE?\r\n'); return; }
@@ -162,7 +168,10 @@ export class Ccp {
     if (!target) { this.console.write('NO DISK\r\n'); return; }
     const file = target.disk.find(this.bdos.user, parsed.name, parsed.ext);
     if (!file) { this.console.write('NO FILE\r\n'); return; }
-    for (let r = 0; r * 128 < file.data.length; r += 26) this.bdos.touch(file, r, false);
+    for (let r = 0; r * 128 < file.data.length; r += 26) {
+      this.bdos.touch(file, r, false, Math.min(26, Math.ceil(file.data.length / 128) - r));
+    }
+    await this.machine.payDisk();
     let last = 10;
     for (const b of file.data) {
       if (b === 0x1a) break;

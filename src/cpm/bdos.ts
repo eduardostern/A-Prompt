@@ -307,22 +307,26 @@ export class Bdos {
   }
 
   /**
-   * Disk activity for the drive sounds: the track a real 8" drive would seek
-   * to. The directory is track 2; a file's records follow on from a track
-   * picked from its name, 26 records a track.
+   * Disk activity, for the drive sounds and the era's drive speed: the drive
+   * (0 = A:), the track a real 8" drive would seek to, and how many 128-byte
+   * records. The directory is track 2; a file's records follow on from a
+   * track picked from its name, 26 records a track.
    */
-  onDisk?: (track: number, write: boolean) => void;
+  onDisk?: (drive: number, track: number, write: boolean, records: number) => void;
 
-  /** Reports an access to `record` of `f`, or to the directory when `f` is null. */
-  touch(f: CpmFile | null, record: number, write: boolean): void {
+  /** Reports an access to `records` records of `f` from `record`, or to the directory when `f` is null. */
+  touch(f: CpmFile | null, record: number, write: boolean, records = 1): void {
     if (!this.onDisk) return;
     let track = 2;
+    let drive = this.drive;
     if (f) {
       let h = 0;
       for (const c of f.name + f.ext) h = (h * 31 + c.charCodeAt(0)) >>> 0;
       track = 3 + ((h % 60) + Math.floor(record / 26)) % 74;
+      const owner = this.drives.findIndex((d) => d.files.includes(f));
+      if (owner >= 0) drive = owner;
     }
-    this.onDisk(track, write);
+    this.onDisk(drive, track, write, records);
   }
 
   private readRecord(f: CpmFile, record: number): boolean {

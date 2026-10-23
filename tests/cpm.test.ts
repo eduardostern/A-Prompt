@@ -79,12 +79,18 @@ describe('CP/M 2.2 machine', () => {
   it('reports disk activity for the drive sounds: directory, then the file a track at a time', async () => {
     const { machine } = boot();
     const tracks: number[] = [];
-    machine.bdos.onDisk = (track) => tracks.push(track);
+    const records: number[] = [];
+    machine.bdos.onDisk = (drive, track, _write, n) => {
+      expect(drive).toBe(0);
+      tracks.push(track);
+      records.push(n);
+    };
     machine.disk.put('BIG', 'COM', new Uint8Array(60 * 128).fill(0xc9)); // RET
     await machine.runCom(machine.disk.find(0, 'BIG     ', 'COM')!, 'BIG');
     // Directory (track 2), then 60 records = three tracks in a row.
     expect(tracks[0]).toBe(2);
     expect(tracks).toHaveLength(4);
+    expect(records).toEqual([1, 26, 26, 8]);
     expect(tracks[2]).toBe(tracks[1] + 1);
     expect(tracks[3]).toBe(tracks[2] + 1);
     expect(tracks.every((t) => t >= 2 && t < 77)).toBe(true);
@@ -104,6 +110,16 @@ describe('CP/M 2.2 machine', () => {
     await machine.runCom(machine.disk.find(0, 'HELLO   ', 'COM')!, 'HELLO');
     expect(con.output).toContain('Hello from CP/M 2.2!');
     expect(sleeps.length).toBeGreaterThan(0);
+  });
+
+  it('waits for the drive when drives run at the speed of the era', async () => {
+    const { machine } = boot();
+    const sleeps: number[] = [];
+    machine.sleepFn = async (ms) => { sleeps.push(ms); };
+    machine.bdos.onDisk = (_d, _t, _w, n) => machine.owe(n * 36);
+    await machine.runCom(machine.disk.find(0, 'HELLO   ', 'COM')!, 'HELLO');
+    // HELLO.COM is one record, plus the directory: 72 ms before it runs.
+    expect(sleeps.reduce((a, b) => a + b, 0)).toBe(72);
   });
 
   it('returns to the CCP when a program halts the CPU', async () => {

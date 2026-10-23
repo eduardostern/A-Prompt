@@ -13,6 +13,7 @@ import { setupDisplay } from './display-ui';
 import { askConfirm } from './confirm';
 import { waitForPower, warmUp } from './power';
 import { MachineSounds } from './drive-sound';
+import { DriveSetup, DriveTiming, SETUPS } from './drives';
 import { startCallSound } from './modem-audio';
 import { assemble } from './cpm/assembler';
 import { streamChat } from './deepseek';
@@ -1068,7 +1069,39 @@ const saveSounds = () => {
 };
 driveBox.addEventListener('change', saveSounds);
 keysBox.addEventListener('change', saveSounds);
-machine.bdos.onDisk = (track) => sounds.disk(track);
+
+// Drives of the era: what each drive is, and whether programs wait for it.
+const DRIVES_KEY = 'a-prompt.drives';
+const timing = new DriveTiming();
+let eraSpeed = false;
+const setupSelect = el<HTMLSelectElement>('drive-setup');
+const eraBox = el<HTMLInputElement>('drive-era');
+for (const [id, label] of Object.entries(SETUPS)) setupSelect.add(new Option(label, id));
+try {
+  const saved = JSON.parse(localStorage.getItem(DRIVES_KEY) ?? '{}') as { setup?: string; era?: unknown };
+  if (saved.setup && saved.setup in SETUPS) timing.setup = saved.setup as DriveSetup;
+  if (typeof saved.era === 'boolean') eraSpeed = saved.era;
+} catch {
+  /* defaults */
+}
+setupSelect.value = timing.setup;
+eraBox.checked = eraSpeed;
+const saveDrives = () => {
+  timing.setup = setupSelect.value as DriveSetup;
+  eraSpeed = eraBox.checked;
+  try {
+    localStorage.setItem(DRIVES_KEY, JSON.stringify({ setup: timing.setup, era: eraSpeed }));
+  } catch {
+    /* ignore */
+  }
+};
+setupSelect.addEventListener('change', saveDrives);
+eraBox.addEventListener('change', saveDrives);
+machine.bdos.onDisk = (drive, track, _write, records) => {
+  const a = timing.access(drive, track, records, performance.now());
+  sounds.disk(drive, a);
+  if (eraSpeed) machine.owe(a.ms);
+};
 con.term.onKey(() => sounds.keyClick());
 
 // ---- power ------------------------------------------------------------

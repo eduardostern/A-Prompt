@@ -71,9 +71,15 @@ Zork, WordStar and MBASIC from your own archive.
 - **Serial terminal speed.** Set the line to 300, 1200, 2400, 9600 or
   19200 baud and text crawls onto the screen as it did; programs wait for
   the line, as they waited for the UART.
-- **It sounds like a machine.** The floppy drive's motor, the head-load
-  clack and a tick for every track it steps across, from what CP/M actually
-  reads and writes; key clicks if you want them.
+- **Drives of the era.** Pick 8-inch floppies (1977), 5¼-inch floppies
+  (1981), ST-506 hard disks (1983), or floppies on A: and B: with hard disks
+  on C: and D:. Each sounds like itself: the 8-inch head-load clack and
+  ticking steps, the 5¼-inch spin-up and buzzing stepper, the hard disk's
+  whine and soft seek chatter, all from what CP/M actually reads and
+  writes, with the recalibrating grind on a floppy's first access. Tick
+  *Speed of the era* and programs wait for the drive as they did: STAT
+  takes two seconds to load from an 8-inch floppy. Key clicks if you want
+  them.
 - **Real disks.** Mount and export 8" SSSD, 512K, 4 MB and z80pack hard
   disk images; four drives saved in your browser.
 - **Built by AIs for under $1, then finished properly.** See

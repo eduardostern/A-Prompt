@@ -56,7 +56,8 @@ exerciser after any change to `src/z80.ts`.
 | `src/display-ui.ts` | Display card; CRT effects are CSS classes on `#terminal-wrap` |
 | `src/fonts/` | Period terminal fonts with their licences |
 | `src/power.ts` | Power switch and CRT warm-up before the first boot |
-| `src/drive-sound.ts` | Drive and key-click sounds; tracks come from `Bdos.onDisk`/`touch()` |
+| `src/drives.ts` | Drive kinds of the era and their timing (`DriveTiming`) |
+| `src/drive-sound.ts` | Drive and key-click sounds; accesses come from `Bdos.onDisk`/`touch()` |
 | `src/confirm.ts` | Styled yes/no dialog (use it, not `confirm()`) |
 
 ## I/O ports
@@ -199,5 +200,8 @@ user/drive; the CCP restores both from it after each program.
 - A fresh page waits at the power switch: press a key (it never reaches
   CP/M) or set localStorage `a-prompt.autopower` to `1` before loading.
   Reset sets sessionStorage `a-prompt.warm-reboot` and skips the switch.
+- Drive speed of the era: `onDisk` prices each access with `DriveTiming`,
+  `machine.owe(ms)` adds it, and the run loop, `runCom` and the CCP
+  built-ins `await machine.payDisk()`. Tests replace `machine.sleepFn`.
 - Imports through the UI are capped at 512 KB per file (`MAX_UPLOAD`).
 - Check the toolbar at 320, 375 and 430 px widths after UI changes.
