@@ -21,7 +21,7 @@ for the **Bastard Operator From Hell**, and listen to him hang up on you.
 
 **[Open the live demo](https://a-prompt.stern.workers.dev)**: no install, no account.
 
-![Calling the AI board from TERM](docs/screenshot-aiboard.png)
+![A-Prompt powering on: the A-PROMPT 64 sign-on](docs/screenshot-boot.png)
 
 ## Try it in 30 seconds
 
@@ -225,6 +225,8 @@ stores them. Ctrl-X cancels a transfer. Timeouts count seconds from the
 CP/M 3 `T_GET` clock (BDOS 105).
 
 ### Calling the AI board
+
+![Calling the AI board from TERM](docs/screenshot-aiboard.png)
 
 ```text
 A>TERM
