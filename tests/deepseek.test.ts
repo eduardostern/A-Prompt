@@ -69,6 +69,9 @@ describe('assembler and source cleanup', () => {
     const bad = await assemble('BAD', '\tORG\t100H\nSTART:\tLD\tA,1\n\tJMP\tNOWHERE\n\tEND\tSTART\n');
     expect(bad.ok).toBe(false);
     expect(bad.errors.length).toBeGreaterThanOrEqual(2);
+    const empty = await assemble('EMPTY', '\tEND\n');
+    expect(empty.ok).toBe(false);
+    expect(empty.errors[0]).toMatch(/no code/);
   });
 
   it('takes the source out of a code fence', () => {

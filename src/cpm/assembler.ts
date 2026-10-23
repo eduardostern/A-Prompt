@@ -64,5 +64,7 @@ export async function assemble(
   const com = m.disk.find(0, name.padEnd(8), 'COM');
   const listing = `${asmOut}${con.output}`;
   if (!com) return { ok: false, listing, errors: ['LOAD made no .COM file'] };
+  // An empty program assembles cleanly; running it would run whatever is in memory.
+  if (!com.data.length) return { ok: false, listing, errors: ['the program has no code'] };
   return { ok: true, listing, errors: [], com: com.data.slice() };
 }

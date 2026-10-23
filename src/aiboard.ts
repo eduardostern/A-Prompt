@@ -66,7 +66,10 @@ ASM 2.0 rules:
   MVI C,9 / LXI D,text / CALL 5 prints text ending in '$'. Keyboard:
   MVI C,1 / CALL 5 waits for a key, returned in A (echoed); MVI C,6 /
   MVI E,0FFH / CALL 5 returns a waiting key in A, or 0 at once if none.
-  BDOS calls change every register: PUSH and POP what you need.
+- IMPORTANT: every CALL 5 destroys BC, DE and HL; the BDOS also returns
+  its result in HL (L = A). A number you are building in HL, a counter in
+  B or a pointer in DE is gone after the call. Keep such values in memory
+  (STA/LDA, SHLD/LHLD) or PUSH them before CALL 5 and POP them after.
 - New lines are 13,10 (CR LF).
 - End with JMP 0. Set your own stack (LXI SP,STACK, with DS 64 before the
   label STACK:) if you push and call much.
@@ -74,7 +77,10 @@ ASM 2.0 rules:
   ESC[row;colH moves the cursor, ESC[31m to ESC[37m set colours, ESC[0m
   resets.
 - Memory 0100H-FBFFH is free. BDOS 105 (MVI C,105 / LXI D,buf4 / CALL 5)
-  returns the clock's seconds in A as BCD.
+  returns the clock's seconds in register A, as BCD (59 seconds = 59H);
+  the 4-byte buffer gets the date, hours and minutes, not the seconds.
+- Before you answer, check the program by tracing it by hand: every
+  register still holds what you expect after each CALL 5.
 - Keep it under about 400 lines and make it right first time: simple
   logic, careful register use, every label defined.`;
 
@@ -335,20 +341,26 @@ class AiBoard implements Link {
     if (opts.show === 'text') wrap.col = 4;
     let text = '';
     let dots = 0;
+    let line = 0;
     let lastKind = '';
     try {
       for await (const chunk of this.deps.chat({
         key, messages: [...messages], thinking: opts.thinking, signal: this.abort.signal,
-        maxTokens: opts.thinking ? 16384 : 2048,
+        // Thinking counts against max_tokens: leave room for the code after it.
+        maxTokens: opts.thinking ? 65536 : 2048,
       })) {
         if (this.closed) return undefined;
         if (chunk.kind === 'text') text += chunk.text;
         if (opts.show === 'text' && chunk.kind === 'text') {
           wrap.push(chunk.text);
-        } else if (opts.show === 'dots' && ++dots % 25 === 0) {
-          if (chunk.kind !== lastKind) this.say(chunk.kind === 'thinking' ? ' thinking' : ' writing');
+        } else if (opts.show === 'dots' && ++dots % 40 === 0) {
+          if (chunk.kind !== lastKind) {
+            this.say(`${line ? '\r\n' : ''}${chunk.kind === 'thinking' ? 'thinking' : 'writing'} `);
+            line = 9;
+          }
           lastKind = chunk.kind;
           this.say('.');
+          if (++line >= WIDTH) { this.say('\r\n'); line = 0; }
         }
       }
       wrap.flushWord();
@@ -396,6 +408,19 @@ class AiBoard implements Link {
       if (this.closed) return;
       if (answer === undefined) { if (this.mode === 'busy') this.menu(); return; }
       source = cleanSource(answer);
+      if (!/^\s*[A-Z]*:?\s*ORG\b/im.test(source)) {
+        // All thinking and no answer (or prose instead of code).
+        this.say('\r\nNo source came back. ');
+        if (attempt < FIX_TRIES) {
+          this.say(`Asking again (try ${attempt + 1} of ${FIX_TRIES})...\r\n`);
+          messages.push({ role: 'assistant', content: answer || '(no answer)' });
+          messages.push({ role: 'user', content: 'You sent no assembly source. Output the complete program source now, only the source, starting with ORG 100H.' });
+          continue;
+        }
+        this.say('Giving up; try a simpler description.\r\n');
+        this.menu();
+        return;
+      }
       messages.push({ role: 'assistant', content: source });
       this.say(`\r\nAssembling ${name}.ASM... `);
       result = await this.deps.assemble(name, source);

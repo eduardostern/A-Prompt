@@ -118,4 +118,22 @@ describe('AI board', () => {
     expect(b.con.output).toContain('Hello from the AI board');
     await b.waitFor('Run HELLO2 at the A> prompt.');
   }, 30_000);
+
+  it('treats an answer with no source (all thinking) as a failed try', async () => {
+    const b = setup('sk-test');
+    b.type('ATDT AI\r');
+    await b.waitFor('Choice: ');
+    b.answers.push([{ kind: 'thinking', text: 'a very long think' }]); // no text at all
+    b.answers.push([{ kind: 'text', text: FIXED }]);
+    b.type('P');
+    await b.waitFor('Program: ');
+    b.type('say hello\r');
+    await b.waitFor('Name');
+    b.type('hello3\r');
+    await b.waitFor('by ZMODEM now');
+    expect(b.screen()).toContain('No source came back');
+    expect(b.calls.length).toBe(2);
+    expect(b.screen()).not.toContain('is 0 bytes');
+    expect(b.screen()).toContain('Sending HELLO3.ASM and HELLO3.COM');
+  }, 30_000);
 });
