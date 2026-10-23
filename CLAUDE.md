@@ -16,7 +16,7 @@ npx tsc --noEmit                 # typecheck (npm run build also runs it)
 npx tsc -p worker                # typecheck the Worker
 npm run build                    # static site in dist/
 ZEX=1 npx vitest run tests/zex.test.ts   # zexdoc + zexall, ~2.5 min
-npx vite-node scripts/assemble.ts COLOR TETRIS TERM XMODEM ZMODEM && npm run embed
+npx vite-node scripts/assemble.ts COLOR TETRIS JOSHUA TERM XMODEM ZMODEM && npm run embed
                                  # rebuild the sample .COMs from programs/*.ASM
 ```
 
