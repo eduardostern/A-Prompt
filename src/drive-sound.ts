@@ -2,23 +2,26 @@
  * Machine sounds, synthesized: the disk drives and optional key clicks. Each
  * kind of drive sounds like itself:
  *
- * - 8" floppy: the AC motor's hum, the head-load solenoid's clack when an
+ * - 8" floppy: a quiet spindle whir, the head-load solenoid's clack when an
  *   access starts, a sharp tick for every track the head steps.
  * - 5¼" floppy: the motor spinning up, and a buzzy stepper ("brrrt" on a
  *   long seek).
  * - Hard disk: a spin-up whine the first time, then a faint steady whine,
- *   and quick soft ticks when it seeks; it spins down after a while idle.
+ *   and quick soft ticks when it seeks; it spins down after 6 s idle.
  *
  * A floppy recalibrates on its first access (a seek to track 0 and back),
- * the grind every CP/M machine made at boot. The timing comes from
- * `DriveTiming` (src/drives.ts).
+ * the grind every CP/M machine made at boot. Motors stop half a second
+ * (8") or about a second (5¼") after the last access. The timing comes
+ * from `DriveTiming` (src/drives.ts).
  */
 import { audioContext } from './audio';
 import type { DriveKind } from './drives';
 
 const MAX_STEPS = 14; // a long seek is a burst, not a second of ticking
 const VOLUME = 0.5;
-const HARD_SPIN_DOWN_MS = 20_000;
+const HARD_SPIN_DOWN_MS = 6000;
+/** How long a floppy's motor runs on after the last access. */
+const FLOPPY_RUN_ON_MS = { floppy8: 500, floppy5: 900 };
 
 interface Access {
   steps: number;
@@ -82,7 +85,7 @@ export class MachineSounds {
     m.timer = setTimeout(() => {
       motor.stop();
       this.motors.delete(drive);
-    }, a.kind === 'hard' ? HARD_SPIN_DOWN_MS : a.kind === 'floppy5' ? 2500 : 1600);
+    }, a.kind === 'hard' ? HARD_SPIN_DOWN_MS : FLOPPY_RUN_ON_MS[a.kind]);
 
     if (a.kind === 'floppy8' && a.started) {
       this.play(ctx, this.clack!, t, 900, 0.9, 0.7); // the head loads onto the disk
@@ -162,38 +165,33 @@ export class MachineSounds {
     nodes.push(rumble);
 
     if (kind === 'floppy8') {
-      // AC motor: a steady rumble with mains hum.
-      lp.frequency.value = 260;
+      // The spindle: a quiet, smooth whir (a louder rumble and mains hum
+      // sounded like wind and a buzz).
+      lp.frequency.value = 220;
       g.gain.setValueAtTime(0, t);
-      g.gain.linearRampToValueAtTime(0.16, t + 0.2);
-      const hum = ctx.createOscillator();
-      hum.frequency.value = 120;
-      const hg = ctx.createGain();
-      hg.gain.value = 0.05;
-      hum.connect(hg).connect(g);
-      nodes.push(hum);
+      g.gain.linearRampToValueAtTime(0.035, t + 0.15);
     } else if (kind === 'floppy5') {
       // DC motor: spins up, with the 300 rpm wobble of the disk.
       lp.frequency.setValueAtTime(70, t);
       lp.frequency.exponentialRampToValueAtTime(340, t + 0.45);
       g.gain.setValueAtTime(0, t);
-      g.gain.linearRampToValueAtTime(0.2, t + 0.3);
+      g.gain.linearRampToValueAtTime(0.05, t + 0.3);
       const wobble = ctx.createOscillator();
       wobble.frequency.value = 5;
       const depth = ctx.createGain();
-      depth.gain.value = 0.05;
+      depth.gain.value = 0.012;
       wobble.connect(depth).connect(g.gain);
       nodes.push(wobble);
     } else {
       // Hard disk: the platters whine up to 3600 rpm, then a faint steady tone.
       lp.frequency.value = 180;
       g.gain.setValueAtTime(0, t);
-      g.gain.linearRampToValueAtTime(0.08, t + (first ? 2 : 0.3));
+      g.gain.linearRampToValueAtTime(0.025, t + (first ? 2 : 0.3));
       const whine = ctx.createOscillator();
       whine.frequency.setValueAtTime(first ? 400 : 3600, t);
       if (first) whine.frequency.exponentialRampToValueAtTime(3600, t + 2.5);
       const wg = ctx.createGain();
-      wg.gain.value = 0.035;
+      wg.gain.value = 0.1;
       whine.connect(wg).connect(g);
       nodes.push(whine);
     }
@@ -202,7 +200,7 @@ export class MachineSounds {
     return {
       stop: () => {
         const end = ctx.currentTime;
-        const fade = kind === 'hard' ? 2.5 : 0.4;
+        const fade = kind === 'hard' ? 2 : 0.2;
         g.gain.cancelScheduledValues(end);
         g.gain.setValueAtTime(g.gain.value, end);
         g.gain.linearRampToValueAtTime(0, end + fade);
