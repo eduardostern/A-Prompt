@@ -81,6 +81,15 @@ export class XtermConsole implements ConsoleIO {
     }
   }
 
+  /** Columns and rows that would fit now, with the current font. */
+  proposeDimensions(): { cols: number; rows: number } | undefined {
+    try {
+      return this.fitAddon.proposeDimensions();
+    } catch {
+      return undefined;
+    }
+  }
+
   get columns(): number {
     return this.term.cols;
   }

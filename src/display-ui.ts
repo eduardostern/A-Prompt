@@ -5,7 +5,7 @@
 import type { XtermConsole } from './terminal';
 import {
   DEFAULT_DISPLAY, DisplaySettings, FONTS, FontId, PHOSPHOR_BACKGROUND, PRESETS, Phosphor, SIZES,
-  Scanlines, Signal, fontSize, parseDisplay, terminalTheme, textColor,
+  SCREEN_COLS, SCREEN_ROWS, Scanlines, Signal, fontSize, largestFitting, parseDisplay, terminalTheme, textColor,
 } from './display';
 import './fonts/fonts.css';
 
@@ -66,29 +66,38 @@ export function setupDisplay(con: XtermConsole, isNarrow: () => boolean, openCar
   } catch {
     settings = { ...DEFAULT_DISPLAY };
   }
-  let applied = '';
   let loadId = 0;
+
+  /**
+   * Auto size: the font's own size, made smaller if needed so a VT100 screen
+   * (80x24) still fits, but never below its phone size.
+   */
+  function autoSize(): number {
+    const [max, min] = FONTS[settings.font].auto;
+    if (isNarrow()) return min;
+    return largestFitting(max, min, SCREEN_COLS, SCREEN_ROWS, (px) => {
+      con.term.options.fontSize = px;
+      return con.proposeDimensions();
+    });
+  }
 
   /** Font, size and line height; waits for a web font so xterm measures the right one. */
   async function applyFont(): Promise<void> {
     const info = FONTS[settings.font];
-    const px = fontSize(settings, isNarrow());
-    const key = `${settings.font}/${px}`;
-    if (key === applied) return;
-    applied = key;
     const id = ++loadId;
     const first = info.family.split(',')[0].trim();
     try {
-      await document.fonts?.load(`${px}px ${first}`);
+      await document.fonts?.load(`${info.auto[0]}px ${first}`);
     } catch {
       /* fall back to the next font in the list */
     }
     if (id !== loadId) return;
     const o = con.term.options;
+    const before = `${o.fontFamily}/${o.fontSize}/${o.lineHeight}`;
     o.fontFamily = info.family;
-    o.fontSize = px;
     o.lineHeight = info.lineHeight;
-    con.fit();
+    o.fontSize = settings.size ? fontSize(settings, isNarrow()) : autoSize();
+    if (`${o.fontFamily}/${o.fontSize}/${o.lineHeight}` !== before || id === 1) con.fit();
   }
 
   function apply(): void {
@@ -144,6 +153,12 @@ export function setupDisplay(con: XtermConsole, isNarrow: () => boolean, openCar
   }
 
   apply();
-  // Auto sizes depend on the width; the caller runs this on resize.
-  return { refit: () => void applyFont() };
+  // Auto sizes depend on the terminal's size; the caller runs this on resize.
+  let pending = 0;
+  return {
+    refit: () => {
+      cancelAnimationFrame(pending);
+      pending = requestAnimationFrame(() => void applyFont());
+    },
+  };
 }

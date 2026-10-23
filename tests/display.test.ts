@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_DISPLAY, MODERN_DISPLAY, PRESETS, fontSize, mix, parseDisplay, terminalTheme } from '../src/display';
+import { DEFAULT_DISPLAY, MODERN_DISPLAY, PRESETS, fontSize, largestFitting, mix, parseDisplay, terminalTheme } from '../src/display';
 
 describe('display settings', () => {
   it("a first visit gets Eduardo's look: VT220 at 28 px, white phosphor, no effects", () => {
@@ -63,5 +63,25 @@ describe('display settings', () => {
   it('mixes colours', () => {
     expect(mix('#000000', '#ffffff', 0.5)).toBe('#808080');
     expect(mix('#102030', '#ffffff', 0)).toBe('#102030');
+  });
+});
+
+describe('auto size', () => {
+  // A fake terminal 1000x560 px, cells 0.6 x 1.0 of the font size.
+  const screen = (px: number) => ({ cols: Math.floor(1000 / (px * 0.6)), rows: Math.floor(560 / px) });
+
+  it('keeps the largest size when 80x24 fits', () => {
+    expect(largestFitting(16, 12, 80, 24, screen)).toBe(16);
+  });
+
+  it('shrinks until a VT100 screen fits', () => {
+    const px = largestFitting(28, 12, 80, 24, screen);
+    expect(screen(px).cols).toBeGreaterThanOrEqual(80);
+    expect(screen(px).rows).toBeGreaterThanOrEqual(24);
+    expect(screen(px + 1).rows < 24 || screen(px + 1).cols < 80).toBe(true);
+  });
+
+  it('never goes below the smallest size', () => {
+    expect(largestFitting(28, 20, 80, 24, screen)).toBe(20);
   });
 });

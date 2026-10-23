@@ -964,7 +964,7 @@ window.addEventListener('resize', () => {
   wasMobile = mobile;
   con.fit();
 });
-new ResizeObserver(() => con.fit()).observe(el('terminal'));
+new ResizeObserver(() => { con.fit(); display.refit(); }).observe(el('terminal'));
 new ResizeObserver(() => con.fit()).observe(consolePanel);
 document.fonts?.ready.then(() => con.fit());
 

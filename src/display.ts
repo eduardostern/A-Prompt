@@ -157,6 +157,30 @@ export function fontSize(s: DisplaySettings, narrow: boolean): number {
   return narrow ? Math.min(s.size, auto) : s.size;
 }
 
+/** The screen size programs expect of a VT100: Auto keeps it on screen. */
+export const SCREEN_COLS = 80;
+export const SCREEN_ROWS = 24;
+
+/**
+ * The largest font size from `max` down to `min` at which `measure` fits
+ * cols x rows. Cells grow with the size, so it starts from the estimate the
+ * first measurement gives and steps down from there.
+ */
+export function largestFitting(
+  max: number,
+  min: number,
+  cols: number,
+  rows: number,
+  measure: (px: number) => { cols: number; rows: number } | undefined,
+): number {
+  const fits = (d: { cols: number; rows: number } | undefined) => !d || (d.cols >= cols && d.rows >= rows);
+  const first = measure(max);
+  if (fits(first)) return max;
+  let px = Math.min(max - 1, Math.floor(max * Math.min(first!.cols / cols, first!.rows / rows)) + 1);
+  while (px > min && !fits(measure(px))) px--;
+  return Math.max(min, px);
+}
+
 function rgb(hex: string): [number, number, number] {
   const n = parseInt(hex.slice(1), 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
