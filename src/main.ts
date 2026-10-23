@@ -946,6 +946,39 @@ resetMachine.addEventListener('click', async () => {
   window.location.reload();
 });
 
+// ---- full screen --------------------------------------------------------
+
+// The console panel alone on the screen. Where a page element cannot go full
+// screen (Safari on iPhone) it fills the browser window instead. In Chrome the
+// keyboard lock keeps Esc for CP/M programs; holding Esc leaves full screen.
+const fullBtn = el<HTMLButtonElement>('fullscreen');
+const isFull = () => document.fullscreenElement === consolePanel || document.body.classList.contains('pseudo-full');
+const showFull = () => {
+  const on = isFull();
+  fullBtn.classList.toggle('is-on', on);
+  fullBtn.setAttribute('aria-pressed', String(on));
+  fullBtn.title = on ? 'Leave full screen' : 'Full screen';
+};
+fullBtn.addEventListener('click', async () => {
+  try {
+    if (isFull()) {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      document.body.classList.remove('pseudo-full');
+    } else if (document.fullscreenEnabled && consolePanel.requestFullscreen) {
+      await consolePanel.requestFullscreen({ navigationUI: 'hide' });
+      const kb = (navigator as Navigator & { keyboard?: { lock?: (keys: string[]) => Promise<void> } }).keyboard;
+      await kb?.lock?.(['Escape']).catch(() => {});
+    } else {
+      document.body.classList.add('pseudo-full');
+    }
+  } catch {
+    document.body.classList.toggle('pseudo-full');
+  }
+  showFull();
+  con.focus();
+});
+document.addEventListener('fullscreenchange', showFull);
+
 /** Toolbar menus use their short labels (data-short) on narrow screens. */
 function labelToolbar(): void {
   const narrow = window.innerWidth <= 480;
