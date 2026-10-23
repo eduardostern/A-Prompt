@@ -67,6 +67,9 @@ Zork, WordStar and MBASIC from your own archive.
   interference and NTSC or PAL colour fringes with a rolling hum bar.
   It starts switched off: a key or click powers it on, with the degauss
   thunk, the picture opening from a bright line, and the boot bell.
+- **It sounds like a machine.** The floppy drive's motor, the head-load
+  clack and a tick for every track it steps across, from what CP/M actually
+  reads and writes; key clicks if you want them.
 - **Real disks.** Mount and export 8" SSSD, 512K, 4 MB and z80pack hard
   disk images; four drives saved in your browser.
 - **Built by AIs for under $1, then finished properly.** See

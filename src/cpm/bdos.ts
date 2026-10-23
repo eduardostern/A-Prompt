@@ -306,7 +306,27 @@ export class Bdos {
     return true;
   }
 
+  /**
+   * Disk activity for the drive sounds: the track a real 8" drive would seek
+   * to. The directory is track 2; a file's records follow on from a track
+   * picked from its name, 26 records a track.
+   */
+  onDisk?: (track: number, write: boolean) => void;
+
+  /** Reports an access to `record` of `f`, or to the directory when `f` is null. */
+  touch(f: CpmFile | null, record: number, write: boolean): void {
+    if (!this.onDisk) return;
+    let track = 2;
+    if (f) {
+      let h = 0;
+      for (const c of f.name + f.ext) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+      track = 3 + ((h % 60) + Math.floor(record / 26)) % 74;
+    }
+    this.onDisk(track, write);
+  }
+
   private readRecord(f: CpmFile, record: number): boolean {
+    this.touch(f, record, false);
     const off = record * 128;
     if (off >= f.data.length) return false;
     const n = Math.min(128, f.data.length - off);
@@ -335,6 +355,7 @@ export class Bdos {
   }
 
   private writeRecord(f: CpmFile, record: number, disk: Disk): boolean {
+    this.touch(f, record, true);
     const off = record * 128;
     const end = off + 128;
     if (f.data.length < end) {
@@ -437,6 +458,9 @@ export class Bdos {
     // Raw BIOS writes may have changed the directory; refresh the file view.
     const active = this.currentDisk();
     if (active.imageDirty) active.syncImage();
+    // Open, close, search, delete, make and rename go to the directory.
+    if (fn === 15 || fn === 17) this.touch(null, 0, false);
+    else if (fn === 16 || fn === 19 || fn === 22 || fn === 23) this.touch(null, 0, true);
 
     switch (fn) {
       case 0: // P_TERMCPM

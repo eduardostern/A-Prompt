@@ -79,12 +79,12 @@ export class Ccp {
     }
 
     switch (cmd) {
-      case 'DIR': return this.dir(arg);
-      case 'ERA': return this.era(arg);
-      case 'TYPE': return this.type(arg);
-      case 'REN': return this.ren(arg);
+      case 'DIR': this.bdos.touch(null, 0, false); return this.dir(arg);
+      case 'ERA': this.bdos.touch(null, 0, true); return this.era(arg);
+      case 'TYPE': this.bdos.touch(null, 0, false); return this.type(arg);
+      case 'REN': this.bdos.touch(null, 0, true); return this.ren(arg);
       case 'USER': return this.user(arg);
-      case 'SAVE': return this.save(arg);
+      case 'SAVE': this.bdos.touch(null, 0, true); return this.save(arg);
       case 'XSUB': return this.xsub(arg);
       case 'DATE': return this.date();
       case 'CLS': this.console.write('\x1b[2J\x1b[H'); return;
@@ -162,6 +162,7 @@ export class Ccp {
     if (!target) { this.console.write('NO DISK\r\n'); return; }
     const file = target.disk.find(this.bdos.user, parsed.name, parsed.ext);
     if (!file) { this.console.write('NO FILE\r\n'); return; }
+    for (let r = 0; r * 128 < file.data.length; r += 26) this.bdos.touch(file, r, false);
     let last = 10;
     for (const b of file.data) {
       if (b === 0x1a) break;

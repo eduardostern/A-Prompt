@@ -255,6 +255,9 @@ export class CpmMachine {
   }
 
   async runCom(file: CpmFile, line: string): Promise<void> {
+    // The CCP reads the directory, then the program a track at a time.
+    this.bdos.touch(null, 0, false);
+    for (let r = 0; r * 128 < file.data.length; r += 26) this.bdos.touch(file, r, false);
     const m = this.mem;
     const command = line.split(' ')[0];
     const tail = line.slice(command.length).slice(0, 127);
@@ -421,6 +424,7 @@ export class CpmMachine {
         break;
       case 13: { // READ
         const disk = this.drives[this.biosDisk];
+        this.bdos.onDisk?.(this.biosTrack, false);
         const sector = disk?.image?.readSector(this.biosTrack, this.biosSector);
         if (!sector) { cpu.a = 1; break; }
         // The DMA address may be any byte address; the transfer wraps at FFFFh.
@@ -433,6 +437,7 @@ export class CpmMachine {
         if (!disk?.image) { cpu.a = 1; break; }
         const bytes = new Uint8Array(128);
         for (let i = 0; i < 128; i++) bytes[i] = this.mem[(this.biosDma + i) & 0xffff];
+        this.bdos.onDisk?.(this.biosTrack, true);
         const ok = disk.image.writeSector(this.biosTrack, this.biosSector, bytes);
         if (!ok) { cpu.a = 1; break; }
         disk.imageDirty = true;

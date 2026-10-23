@@ -56,6 +56,7 @@ exerciser after any change to `src/z80.ts`.
 | `src/display-ui.ts` | Display card; CRT effects are CSS classes on `#terminal-wrap` |
 | `src/fonts/` | Period terminal fonts with their licences |
 | `src/power.ts` | Power switch and CRT warm-up before the first boot |
+| `src/drive-sound.ts` | Drive and key-click sounds; tracks come from `Bdos.onDisk`/`touch()` |
 | `src/confirm.ts` | Styled yes/no dialog (use it, not `confirm()`) |
 
 ## I/O ports

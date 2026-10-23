@@ -76,6 +76,20 @@ describe('CP/M 2.2 machine', () => {
     expect(con.output).toContain('Hello from CP/M 2.2!');
   });
 
+  it('reports disk activity for the drive sounds: directory, then the file a track at a time', async () => {
+    const { machine } = boot();
+    const tracks: number[] = [];
+    machine.bdos.onDisk = (track) => tracks.push(track);
+    machine.disk.put('BIG', 'COM', new Uint8Array(60 * 128).fill(0xc9)); // RET
+    await machine.runCom(machine.disk.find(0, 'BIG     ', 'COM')!, 'BIG');
+    // Directory (track 2), then 60 records = three tracks in a row.
+    expect(tracks[0]).toBe(2);
+    expect(tracks).toHaveLength(4);
+    expect(tracks[2]).toBe(tracks[1] + 1);
+    expect(tracks[3]).toBe(tracks[2] + 1);
+    expect(tracks.every((t) => t >= 2 && t < 77)).toBe(true);
+  });
+
   it('returns to the CCP when a program halts the CPU', async () => {
     const { machine, con } = boot();
     machine.disk.put('HALT', 'COM', new Uint8Array([0x76]));

@@ -12,6 +12,7 @@ import { audioContext } from './audio';
 import { setupDisplay } from './display-ui';
 import { askConfirm } from './confirm';
 import { waitForPower, warmUp } from './power';
+import { MachineSounds } from './drive-sound';
 import { startCallSound } from './modem-audio';
 import { assemble } from './cpm/assembler';
 import { streamChat } from './deepseek';
@@ -989,6 +990,35 @@ window.setInterval(() => {
 }, 1000);
 statusText.textContent = 'READY';
 con.focus();
+// ---- machine sounds ---------------------------------------------------
+
+const SOUND_KEY = 'a-prompt.sound';
+const sounds = new MachineSounds();
+try {
+  const saved = JSON.parse(localStorage.getItem(SOUND_KEY) ?? '{}') as { drive?: unknown; keys?: unknown };
+  if (typeof saved.drive === 'boolean') sounds.drive = saved.drive;
+  if (typeof saved.keys === 'boolean') sounds.keys = saved.keys;
+} catch {
+  /* defaults: drive on, keys off */
+}
+const driveBox = el<HTMLInputElement>('sound-drive');
+const keysBox = el<HTMLInputElement>('sound-keys');
+driveBox.checked = sounds.drive;
+keysBox.checked = sounds.keys;
+const saveSounds = () => {
+  sounds.drive = driveBox.checked;
+  sounds.keys = keysBox.checked;
+  try {
+    localStorage.setItem(SOUND_KEY, JSON.stringify({ drive: sounds.drive, keys: sounds.keys }));
+  } catch {
+    /* ignore */
+  }
+};
+driveBox.addEventListener('change', saveSounds);
+keysBox.addEventListener('change', saveSounds);
+machine.bdos.onDisk = (track) => sounds.disk(track);
+con.term.onKey(() => sounds.keyClick());
+
 // ---- power ------------------------------------------------------------
 
 // A fresh visit starts with the machine off: browsers allow sound only after
