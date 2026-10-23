@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_DISPLAY, PRESETS, fontSize, mix, parseDisplay, terminalTheme } from '../src/display';
+import { DEFAULT_DISPLAY, MODERN_DISPLAY, PRESETS, fontSize, mix, parseDisplay, terminalTheme } from '../src/display';
 
 describe('display settings', () => {
+  it('a first visit gets the green CRT', () => {
+    expect(DEFAULT_DISPLAY).toEqual(PRESETS.green.settings);
+  });
+
   it('falls back to the default look for missing or broken storage', () => {
     expect(parseDisplay(null)).toEqual(DEFAULT_DISPLAY);
     expect(parseDisplay('{not json')).toEqual(DEFAULT_DISPLAY);
@@ -23,8 +27,9 @@ describe('display settings', () => {
   });
 
   it('auto size follows the font and the screen width', () => {
-    expect(fontSize(DEFAULT_DISPLAY, false)).toBe(15);
-    expect(fontSize(DEFAULT_DISPLAY, true)).toBe(12);
+    expect(fontSize(MODERN_DISPLAY, false)).toBe(15);
+    expect(fontSize(MODERN_DISPLAY, true)).toBe(12);
+    expect(fontSize(DEFAULT_DISPLAY, false)).toBe(20);
     expect(fontSize({ ...DEFAULT_DISPLAY, font: 'glass', size: 24 }, true)).toBe(24);
   });
 
@@ -41,7 +46,7 @@ describe('display settings', () => {
   });
 
   it('the colour look keeps the ANSI palette on the chosen background', () => {
-    const t = terminalTheme({ ...DEFAULT_DISPLAY, background: '#102030' });
+    const t = terminalTheme({ ...MODERN_DISPLAY, background: '#102030' });
     expect(t.red).not.toBe(t.blue);
     expect(t.background).toBe('#102030');
   });

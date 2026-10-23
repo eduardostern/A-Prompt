@@ -47,8 +47,8 @@ export const FONTS: Record<FontId, FontInfo> = {
 
 export const SIZES = [0, 12, 14, 15, 16, 18, 20, 22, 24, 28, 32];
 
-/** Today's look: nothing changes until the visitor asks. */
-export const DEFAULT_DISPLAY: DisplaySettings = {
+/** The clean look: modern font, ANSI colours, light scanlines. */
+export const MODERN_DISPLAY: DisplaySettings = {
   font: 'modern',
   size: 0,
   phosphor: 'color',
@@ -77,7 +77,7 @@ const PHOSPHOR_RGB: Record<Exclude<Phosphor, 'color'>, string> = {
 };
 
 export const PRESETS: Record<string, { label: string; settings: DisplaySettings }> = {
-  modern: { label: 'Modern', settings: DEFAULT_DISPLAY },
+  modern: { label: 'Modern', settings: MODERN_DISPLAY },
   green: {
     label: 'Green CRT',
     settings: {
@@ -107,6 +107,9 @@ export const PRESETS: Record<string, { label: string; settings: DisplaySettings 
     },
   },
 };
+
+/** What a first visit shows: the green CRT. */
+export const DEFAULT_DISPLAY: DisplaySettings = PRESETS.green.settings;
 
 const pick = <T extends string>(value: unknown, allowed: readonly T[], fallback: T): T =>
   allowed.includes(value as T) ? (value as T) : fallback;
