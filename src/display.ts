@@ -76,31 +76,31 @@ const PHOSPHOR_RGB: Record<Exclude<Phosphor, 'color'>, string> = {
   white: '#e6edff',
 };
 
-export const PRESETS: Record<string, { label: string; settings: DisplaySettings }> = {
-  modern: { label: 'Modern', settings: MODERN_DISPLAY },
+export const PRESETS: Record<string, { label: string; short: string; settings: DisplaySettings }> = {
+  modern: { label: 'Modern', short: 'Modern', settings: MODERN_DISPLAY },
   green: {
-    label: 'Green CRT',
+    label: 'Green CRT', short: 'Green',
     settings: {
       font: 'glass', size: 0, phosphor: 'green', background: PHOSPHOR_BACKGROUND.green,
       scanlines: 'heavy', glow: true, flicker: true, curve: true, interference: false, signal: 'ntsc',
     },
   },
   amber: {
-    label: 'Amber CRT',
+    label: 'Amber CRT', short: 'Amber',
     settings: {
       font: 'vt323', size: 0, phosphor: 'amber', background: PHOSPHOR_BACKGROUND.amber,
       scanlines: 'heavy', glow: true, flicker: true, curve: true, interference: false, signal: 'pal',
     },
   },
   ibm: {
-    label: 'IBM PC',
+    label: 'IBM PC', short: 'IBM',
     settings: {
       font: 'vga', size: 0, phosphor: 'color', background: '#000000',
       scanlines: 'light', glow: true, flicker: false, curve: true, interference: false, signal: 'rgb',
     },
   },
   worn: {
-    label: 'Worn out',
+    label: 'Worn out', short: 'Worn',
     settings: {
       font: 'glass', size: 0, phosphor: 'white', background: PHOSPHOR_BACKGROUND.white,
       scanlines: 'heavy', glow: true, flicker: true, curve: true, interference: true, signal: 'ntsc',

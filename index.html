@@ -45,10 +45,11 @@
             <div class="panel-tools">
               <button id="sidebar-toggle" class="panel-toggle" type="button" aria-expanded="true" aria-controls="sidebar" title="Show/hide panels" aria-label="Show or hide panels">▤ <span class="panel-toggle-label">Panels</span></button>
               <select id="terminal-type" class="terminal-select" aria-label="Terminal emulation" title="Terminal emulation">
-                <option value="ansi">ANSI / VT100</option>
-                <option value="adm3a">ADM-3A</option>
+                <option value="ansi" data-short="ANSI">ANSI / VT100</option>
+                <option value="adm3a" data-short="ADM3A">ADM-3A</option>
                 <option value="vt52">VT52</option>
               </select>
+              <select id="display-preset" class="terminal-select" aria-label="Display" title="Screen: font, phosphor and CRT effects"></select>
               <select id="clock-speed" class="terminal-select" aria-label="Z80 clock speed" title="Z80 clock speed (Max runs as fast as your computer allows)">
                 <option value="2000000">2 MHz</option>
                 <option value="4000000">4 MHz</option>

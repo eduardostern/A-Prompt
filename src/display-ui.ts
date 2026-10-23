@@ -13,7 +13,8 @@ const KEY = 'a-prompt.display';
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
-export function setupDisplay(con: XtermConsole, isNarrow: () => boolean): { refit(): void } {
+/** `openCard` shows the Display card, for the toolbar's "More settings…". */
+export function setupDisplay(con: XtermConsole, isNarrow: () => boolean, openCard: () => void): { refit(): void } {
   const wrap = $('terminal-wrap');
   const font = $<HTMLSelectElement>('display-font');
   const size = $<HTMLSelectElement>('display-size');
@@ -28,9 +29,27 @@ export function setupDisplay(con: XtermConsole, isNarrow: () => boolean): { refi
     interference: $<HTMLInputElement>('display-interference'),
   };
   const presets = $('display-presets');
+  const toolbar = $<HTMLSelectElement>('display-preset');
 
   for (const [id, f] of Object.entries(FONTS)) font.add(new Option(f.label, id));
   for (const n of SIZES) size.add(new Option(n ? `${n} px` : 'Auto', String(n)));
+  for (const [id, p] of Object.entries(PRESETS)) {
+    const o = new Option(p.label, id);
+    o.dataset.short = p.short;
+    toolbar.add(o);
+  }
+  const custom = new Option('Custom', 'custom');
+  custom.disabled = true;
+  toolbar.add(custom);
+  const more = new Option('More settings…', 'more');
+  more.dataset.short = 'More…';
+  toolbar.add(more);
+  toolbar.addEventListener('change', () => {
+    if (toolbar.value === 'more') openCard();
+    else if (PRESETS[toolbar.value]) set({ ...PRESETS[toolbar.value].settings });
+    apply(); // puts the menu back on the current look
+    if (toolbar.value !== 'more') con.focus();
+  });
   for (const [id, p] of Object.entries(PRESETS)) {
     const b = document.createElement('button');
     b.type = 'button';
@@ -90,9 +109,11 @@ export function setupDisplay(con: XtermConsole, isNarrow: () => boolean): { refi
     signal.value = s.signal;
     for (const k of Object.keys(checks) as (keyof typeof checks)[]) checks[k].checked = s[k];
     const current = JSON.stringify(s);
+    const match = Object.keys(PRESETS).find((id) => JSON.stringify(PRESETS[id].settings) === current);
     for (const b of presets.querySelectorAll<HTMLButtonElement>('button')) {
-      b.classList.toggle('active', JSON.stringify(PRESETS[b.dataset.preset!].settings) === current);
+      b.classList.toggle('active', b.dataset.preset === match);
     }
+    toolbar.value = match ?? 'custom';
   }
 
   function set(next: DisplaySettings): void {

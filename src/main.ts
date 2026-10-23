@@ -10,6 +10,7 @@ import { createAiBoard } from './aiboard';
 import { withCallSound } from './call-sound';
 import { audioContext } from './audio';
 import { setupDisplay } from './display-ui';
+import { askConfirm } from './confirm';
 import { startCallSound } from './modem-audio';
 import { assemble } from './cpm/assembler';
 import { streamChat } from './deepseek';
@@ -63,7 +64,12 @@ const el = <T extends HTMLElement>(id: string): T => {
 };
 
 const con = new XtermConsole(el('terminal'));
-const display = setupDisplay(con, () => window.innerWidth < 700);
+const display = setupDisplay(con, () => window.innerWidth < 700, () => {
+  setPanels(true);
+  const card = el<HTMLDetailsElement>('display-card');
+  card.open = true;
+  card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+});
 const machine = new CpmMachine(con);
 
 // ---- DeepSeek key (AI board) -------------------------------------------
@@ -562,10 +568,16 @@ fileList.addEventListener('click', (ev) => {
     downloadFile(found.file);
   } else if (btn.dataset.act === 'delete') {
     const letter = letterFor(Number(row.dataset.drive));
-    if (!confirm(`Delete ${displayName(found.file)} from drive ${letter}:?`)) return;
-    found.disk.remove(found.file);
-    machine.forgetFile(found.file);
-    renderFiles();
+    void askConfirm({
+      title: `Delete ${displayName(found.file)}?`,
+      message: `The file goes from drive ${letter}: for good.`,
+      ok: 'Delete',
+    }).then((yes) => {
+      if (!yes) return;
+      found.disk.remove(found.file);
+      machine.forgetFile(found.file);
+      renderFiles();
+    });
   }
 });
 
@@ -862,11 +874,16 @@ clockSelect.addEventListener('change', () => {
   con.focus();
 });
 
-resetBtn.addEventListener('click', () => {
+resetBtn.addEventListener('click', async () => {
   if (machine.busy) return;
   const letter = letterFor(activeDrive);
-  const extra = activeDrive === 0 ? ' and restore the original programs' : '';
-  if (!confirm(`Delete all files on drive ${letter}:${extra}?`)) return;
+  const extra = activeDrive === 0 ? ' The original programs come back.' : '';
+  const yes = await askConfirm({
+    title: `Restore drive ${letter}:?`,
+    message: `Every file on drive ${letter}: is deleted.${extra}`,
+    ok: 'Restore',
+  });
+  if (!yes || machine.busy) return;
   drives[activeDrive].reset();
   localStorage.removeItem(driveKey(activeDrive));
   machine.bdos.resetDrive(activeDrive);
@@ -906,13 +923,34 @@ machine.onSpeed = (mhz) => {
   speedEl.textContent = `≈ ${Math.max(1, Math.round(mhz))} MHz`;
 };
 
-resetMachine.addEventListener('click', () => {
-  if (machine.busy && !confirm('A program is running. Reboot the emulator anyway?')) return;
+resetMachine.addEventListener('click', async () => {
+  if (
+    machine.busy &&
+    !(await askConfirm({
+      title: 'Reboot the machine?',
+      message: 'A program is running and stops here. Your drives are kept.',
+      ok: 'Reboot',
+    }))
+  ) {
+    con.focus();
+    return;
+  }
   saveAllDrives();
   window.location.reload();
 });
 
+/** Toolbar menus use their short labels (data-short) on narrow screens. */
+function labelToolbar(): void {
+  const narrow = window.innerWidth <= 480;
+  for (const o of document.querySelectorAll<HTMLOptionElement>('.panel-tools option[data-short]')) {
+    o.dataset.long ??= o.textContent ?? '';
+    o.textContent = narrow ? o.dataset.short! : o.dataset.long;
+  }
+}
+labelToolbar();
+
 window.addEventListener('resize', () => {
+  labelToolbar();
   display.refit();
   const mobile = isMobileLayout();
   if (mobile && !wasMobile) setPanels(false, false);

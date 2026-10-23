@@ -1190,6 +1190,9 @@ body { overflow: hidden; }
 /* Small phones: the A> prompt already names the drive. */
 @media (max-width: 360px) {
   .panel-title { display: none; }
+  .panel-tools { gap: 5px; }
+  .terminal-select { padding: 4px 15px 4px 5px; background-position: calc(100% - 8px) 50%, calc(100% - 4px) 50%, 0 0; }
+  #display-preset { max-width: 62px; }
 }
 
 /* Shown when a drive no longer fits in localStorage. */
@@ -1237,3 +1240,63 @@ body { overflow: hidden; }
 .display-effects label { display: flex; gap: 6px; align-items: center; cursor: pointer; }
 .display-effects input { accent-color: var(--green); }
 .display-note { margin-top: 10px; font-size: 11px; color: var(--muted); }
+
+/* ---- confirm dialog (src/confirm.ts) ---------------------------------- */
+
+.confirm-dialog {
+  width: min(400px, calc(100vw - 32px));
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+}
+.confirm-dialog::backdrop {
+  background: rgba(2, 7, 4, 0.7);
+  backdrop-filter: blur(3px);
+}
+.confirm-dialog form {
+  padding: 22px 22px 18px;
+  border: 1px solid var(--line-2);
+  border-radius: 14px;
+  background:
+    radial-gradient(400px 160px at 0% -20%, rgba(94, 224, 143, 0.08), transparent 60%),
+    var(--panel);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.7);
+}
+.confirm-dialog h2 {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  color: var(--green);
+}
+.confirm-dialog p {
+  margin: 10px 0 18px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.confirm-actions button {
+  padding: 7px 14px;
+  border: 1px solid var(--line-2);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.confirm-actions button:hover { color: var(--text); }
+.confirm-actions .confirm-ok {
+  color: var(--green);
+  border-color: var(--green-2);
+  background: rgba(94, 224, 143, 0.08);
+}
+.confirm-actions .confirm-ok:hover,
+.confirm-actions .confirm-ok:focus-visible {
+  background: rgba(94, 224, 143, 0.16);
+  outline: none;
+}

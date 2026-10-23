@@ -106,12 +106,12 @@ export class CpmMachine {
     return kb < 1024 ? `${kb}K` : `${Math.round(kb / 1024)}M`;
   }
 
-  /** The power-on screen: a bell, then the machine's sign-on. */
+  /** The power-on screen: the machine's sign-on, then a bell. */
   private printBanner(): void {
     const c = this.console;
     const mhz = this.clockHz ? `${+(this.clockHz / 1e6).toFixed(2)} MHz` : 'full speed';
     const drives = this.drives.map((d) => `${d.label}:${this.driveSize(d)}`).join(' ');
-    c.write('\x07\r\n');
+    c.write('\r\n');
     if (c.columns < 60) {
       c.write(`  ${MACHINE_NAME}\r\n`);
       c.write(`  Z80 computer, BIOS ${BIOS_VERSION}\r\n`);
@@ -122,6 +122,7 @@ export class CpmMachine {
       c.write('  Modem Hayes, ports 04h/05h\r\n\r\n');
       c.write('  CP/M 2.2 (c) 1979 Digital Research\r\n');
       c.write('  Type HELP. Try DIR, TETRIS, TERM.\r\n\r\n');
+      c.write('\x07');
       return;
     }
     const w = 54;
@@ -137,6 +138,7 @@ export class CpmMachine {
     c.write('  CP/M 2.2  -  Copyright (c) 1979 Digital Research\r\n');
     c.write('  Type HELP for commands. Try DIR, TETRIS, or TERM and\r\n');
     c.write('  ATDT AI to call the AI board.\r\n\r\n');
+    c.write('\x07');
   }
 
   async start(): Promise<void> {

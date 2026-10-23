@@ -11,13 +11,36 @@ import { audioContext } from './audio';
 
 const FREQ_HZ = 786;
 const DURATION_S = 0.25;
-const VOLUME = 0.12;
+const VOLUME = 0.05;
 
 let busyUntil = 0;
 
+/** A bell rung while the browser still blocks sound waits for it. */
+let waiting = false;
+
+/**
+ * Rings after the screen has drawn: setting up audio can take the main
+ * thread for a moment, and the text before the bell should not wait for it.
+ */
 export function ringBell(): void {
+  requestAnimationFrame(() => setTimeout(ring, 0));
+}
+
+function ring(): void {
   const ctx = audioContext();
   if (!ctx) return;
+  if (ctx.state !== 'running') {
+    // Before the first click or key the context stays suspended; resume()
+    // settles once the page may play sound, and the bell rings then.
+    if (!waiting) {
+      waiting = true;
+      ctx.resume().then(
+        () => { waiting = false; ring(); },
+        () => { waiting = false; },
+      );
+    }
+    return;
+  }
   try {
     const t = ctx.currentTime;
     // A bell while one is sounding just merges into it, like the real one.
