@@ -7,6 +7,9 @@ import { ringBell } from './bell';
 import { CP437 } from './cp437';
 
 
+/** Characters the line may queue before the program has to wait (a UART's buffer, roughly). */
+const LINE_FIFO = 16;
+
 export class XtermConsole implements ConsoleIO {
   readonly term: Terminal;
   private fitAddon: FitAddon;
@@ -116,8 +119,65 @@ export class XtermConsole implements ConsoleIO {
     this.onActivity?.();
   }
 
+  /**
+   * Output speed of the serial line in baud (0: no limit). Characters then
+   * reach the screen at baud/10 a second, and the machine waits while more
+   * than a few are queued, as a computer waits on its UART.
+   */
+  get baud(): number {
+    return this.lineBaud;
+  }
+
+  set baud(value: number) {
+    this.lineBaud = value;
+    this.drain();
+  }
+
+  private lineBaud = 0;
+  private pending = '';
+  private drainTimer: ReturnType<typeof setTimeout> | undefined;
+  private lastDrain = 0;
+
+  /** Milliseconds the program should wait before sending more output. */
+  outputDelay(): number {
+    const backlog = this.pending.length - LINE_FIFO;
+    return this.lineBaud && backlog > 0 ? (backlog * 10_000) / this.lineBaud : 0;
+  }
+
+  private out(text: string): void {
+    if (!this.lineBaud && !this.pending) {
+      this.term.write(text);
+      return;
+    }
+    this.pending += text;
+    if (this.drainTimer === undefined) {
+      this.lastDrain = performance.now();
+      this.drainTimer = setTimeout(() => this.drain(), 0);
+    }
+  }
+
+  /** Sends what the line has carried since the last call. */
+  private drain(): void {
+    clearTimeout(this.drainTimer);
+    this.drainTimer = undefined;
+    if (!this.pending) return;
+    if (!this.lineBaud) {
+      this.term.write(this.pending);
+      this.pending = '';
+      return;
+    }
+    const now = performance.now();
+    const n = Math.floor(((now - this.lastDrain) * this.lineBaud) / 10_000);
+    if (n > 0) {
+      this.term.write(this.pending.slice(0, n));
+      this.pending = this.pending.slice(n);
+      this.lastDrain += (n * 10_000) / this.lineBaud;
+    }
+    if (this.pending) this.drainTimer = setTimeout(() => this.drain(), 15);
+  }
+
   write(text: string): void {
-    this.term.write(text);
+    this.out(text);
     if (text.length) this.lastByte = text.charCodeAt(text.length - 1);
   }
 
@@ -127,7 +187,7 @@ export class XtermConsole implements ConsoleIO {
     if (this.translator.type !== 'ansi') {
       const out = this.translator.feed(code);
       if (typeof out === 'number') this.writeRawByte(out);
-      else if (out) this.term.write(out);
+      else if (out) this.out(out);
       for (const b of this.translator.takeResponse()) this.push(b);
       return;
     }
@@ -136,16 +196,16 @@ export class XtermConsole implements ConsoleIO {
 
   private writeRawByte(code: number): void {
     switch (code) {
-      case 0x0d: this.term.write('\r'); break;
-      case 0x0a: this.term.write('\n'); break;
-      case 0x08: this.term.write('\b'); break;
-      case 0x09: this.term.write('\t'); break;
-      case 0x07: this.term.write('\x07'); break;
-      case 0x0c: this.term.write('\x1b[2J\x1b[H'); break;
+      case 0x0d: this.out('\r'); break;
+      case 0x0a: this.out('\n'); break;
+      case 0x08: this.out('\b'); break;
+      case 0x09: this.out('\t'); break;
+      case 0x07: this.out('\x07'); break;
+      case 0x0c: this.out('\x1b[2J\x1b[H'); break;
       default:
-        if (code >= 0x20 && code < 0x7f) this.term.write(String.fromCharCode(code));
-        else if (code >= 0x80) this.term.write(CP437[code - 0x80] ?? '?');
-        else this.term.write(String.fromCharCode(code));
+        if (code >= 0x20 && code < 0x7f) this.out(String.fromCharCode(code));
+        else if (code >= 0x80) this.out(CP437[code - 0x80] ?? '?');
+        else this.out(String.fromCharCode(code));
         break;
     }
   }

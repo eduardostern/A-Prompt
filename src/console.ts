@@ -15,6 +15,8 @@ export interface ConsoleIO {
   lastByte: number;
   /** Terminal width in columns (CP/M assumes 80). */
   readonly columns: number;
+  /** Milliseconds to wait before more output fits on a slow serial line. */
+  outputDelay?(): number;
 }
 
 export class WarmBoot extends Error {

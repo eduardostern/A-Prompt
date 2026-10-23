@@ -1023,6 +1023,25 @@ window.setInterval(() => {
 }, 1000);
 statusText.textContent = 'READY';
 con.focus();
+// ---- line speed -------------------------------------------------------
+
+const BAUD_KEY = 'a-prompt.baud';
+const lineSpeed = el<HTMLSelectElement>('line-speed');
+const applyBaud = (value: string) => {
+  if (![...lineSpeed.options].some((o) => o.value === value)) value = '0';
+  lineSpeed.value = value;
+  con.baud = Number(value);
+};
+applyBaud(localStorage.getItem(BAUD_KEY) ?? '0');
+lineSpeed.addEventListener('change', () => {
+  applyBaud(lineSpeed.value);
+  try {
+    localStorage.setItem(BAUD_KEY, lineSpeed.value);
+  } catch {
+    /* ignore */
+  }
+});
+
 // ---- machine sounds ---------------------------------------------------
 
 const SOUND_KEY = 'a-prompt.sound';

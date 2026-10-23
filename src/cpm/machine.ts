@@ -310,6 +310,9 @@ export class CpmMachine {
           const before = performance.now();
           if (pc === BDOS_ENTRY) await this.bdos.handle();
           else if (await this.biosTrap(pc)) break;
+          // A slow serial line holds the program until its output is sent.
+          const lineWait = this.console.outputDelay?.() ?? 0;
+          if (lineWait > 1) await this.sleepFn(Math.min(lineWait, 100));
           // Time spent waiting for a key is not owed back as a burst of speed.
           if (performance.now() - before > 1) repace();
           continue;

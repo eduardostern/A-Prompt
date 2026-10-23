@@ -90,6 +90,22 @@ describe('CP/M 2.2 machine', () => {
     expect(tracks.every((t) => t >= 2 && t < 77)).toBe(true);
   });
 
+  it('waits for a slow serial line before sending more output', async () => {
+    const { machine, con } = boot();
+    let queued = 0;
+    // A line that queues every character and needs 5 ms per character beyond 16.
+    const write = con.write.bind(con);
+    con.write = (t: string) => { queued += t.length; write(t); };
+    const writeByte = con.writeByte.bind(con);
+    con.writeByte = (b: number) => { queued++; writeByte(b); };
+    (con as unknown as { outputDelay: () => number }).outputDelay = () => Math.max(0, queued - 16) * 5;
+    const sleeps: number[] = [];
+    machine.sleepFn = async (ms) => { sleeps.push(ms); queued = Math.max(0, queued - ms / 5); };
+    await machine.runCom(machine.disk.find(0, 'HELLO   ', 'COM')!, 'HELLO');
+    expect(con.output).toContain('Hello from CP/M 2.2!');
+    expect(sleeps.length).toBeGreaterThan(0);
+  });
+
   it('returns to the CCP when a program halts the CPU', async () => {
     const { machine, con } = boot();
     machine.disk.put('HALT', 'COM', new Uint8Array([0x76]));
