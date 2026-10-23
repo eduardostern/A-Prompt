@@ -137,8 +137,11 @@ export class CpmMachine {
       c.write('  RAM   64K OK\r\n');
       c.write(`  Disk  ${drives}\r\n`);
       c.write('  Modem Hayes, ports 04h/05h\r\n\r\n');
-      c.write('  CP/M 2.2 (c) 1979 Digital Research\r\n');
-      c.write('  Type HELP. Try DIR, TETRIS, TERM.\r\n\r\n');
+      c.write('  CP/M 2.2 (c) 1979 Digital Research\r\n\r\n');
+      c.write('  HELP for commands, DIR for files.\r\n');
+      c.write('  Games: TETRIS, JOSHUA.\r\n');
+      c.write('  Modem: TERM, then ATDT AI for the\r\n');
+      c.write('  AI board, ATI for real BBSes.\r\n\r\n');
       c.write('\x07');
       return;
     }
@@ -152,9 +155,14 @@ export class CpmMachine {
     c.write('  Memory .... 64K RAM OK, 63K TPA (0100h-FBFFh)\r\n');
     c.write(`  Drives .... ${drives}\r\n`);
     c.write('  Modem ..... Hayes AT, telnet line on ports 04h/05h\r\n\r\n');
-    c.write('  CP/M 2.2  -  Copyright (c) 1979 Digital Research\r\n');
-    c.write('  Type HELP for commands. Try DIR, TETRIS, or TERM and\r\n');
-    c.write('  ATDT AI to call the AI board.\r\n\r\n');
+    c.write('  CP/M 2.2  -  Copyright (c) 1979 Digital Research\r\n\r\n');
+    c.write('  Type HELP for commands, DIR for the programs on A:.\r\n');
+    c.write('  Games: TETRIS, and JOSHUA (shall we play a game?).\r\n\r\n');
+    c.write('  The modem: type TERM, then\r\n');
+    c.write('    ATDT AI   call the AI board: chat with DeepSeek, meet the BOFH,\r\n');
+    c.write('              or have it write and fix programs for you\r\n');
+    c.write('    ATI       list the real BBSes still online; ATDT 1 calls one\r\n');
+    c.write('  Ctrl-] leaves TERM with the call up; ZMODEM R fetches files.\r\n\r\n');
     c.write('\x07');
   }
 

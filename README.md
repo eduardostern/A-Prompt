@@ -188,8 +188,9 @@ keeps games with timing loops playable. **Reset** stops a runaway program
 Bundled programs: **PIP**, **STAT**, **DDT**, **ED**, **ASM**, **LOAD**,
 **SUBMIT**, **DUMP**, **HELLO.COM**, **INPUT.COM**, **COLOR.COM** (shows the
 ANSI palette), **TETRIS.COM** (a colour Tetris for the ANSI terminal),
-**JOSHUA.COM** (WOPR's tic-tac-toe from *WarGames*: try zero players; ordered
-from the AI board with `ATDT DEEPSEEK` and written by DeepSeek V4.1 Flash),
+**JOSHUA.COM** (the WOPR from *WarGames*: log on as JOSHUA, pick a game
+from its list, and play tic-tac-toe with zero players until it runs every
+war scenario and learns),
 **TERM.COM** (a terminal for the telnet modem), **XMODEM.COM** and
 **ZMODEM.COM** (file transfer over it), with their 8080 sources, plus
 **DEMO.SUB** and **XSUB.SUB**.
@@ -725,8 +726,11 @@ A-Prompt was designed and built by Eduardo Stern. See `AUTHORS`.
   [cpm.z80.de/license.html](http://www.cpm.z80.de/license.html).
 - `HELLO`, `COLOR`, `TETRIS`, `TERM`, `XMODEM`, `ZMODEM` (`.COM` and `.ASM`) and `DEMO.SUB` are original
   examples for this project, assembled with the bundled ASM and LOAD.
-- `JOSHUA` (`.COM` and `.ASM`) was ordered by Eduardo Stern from the AI board
-  inside A-Prompt (`ATDT DEEPSEEK`, then `P`) and written by DeepSeek V4.1 Flash.
+- `JOSHUA` (`.COM` and `.ASM`): Eduardo Stern ordered the first version, the
+  zero-player tic-tac-toe, from the AI board inside A-Prompt (`ATDT DEEPSEEK`,
+  then `P`), and DeepSeek V4.1 Flash wrote it. Claude Opus 5.5 added the logon,
+  WOPR's game list, Global Thermonuclear War, the war-scenario montage, random
+  openings and the gradual speed-up.
 - xterm.js, fflate and other dependencies retain their own MIT licenses.
 - Terminal fonts (`src/fonts/`, unmodified): Glass TTY VT220 by Viacheslav
   Slavinsky (public domain); VT323 by Peter Hull (SIL OFL 1.1); IBM VGA 8x16
