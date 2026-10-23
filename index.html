@@ -3,11 +3,21 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="A-Prompt — a CP/M 2.2 emulator with an original Z80 CPU core, running entirely in the browser." />
+    <meta name="description" content="CP/M 2.2 in your browser, and it dials out: call real telnet BBSes with the modem screech, download with ZMODEM, order an 8080 program from an AI sysop, or get hung up on by the BOFH." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://a-prompt.stern.workers.dev/" />
+    <meta property="og:title" content="A-Prompt · CP/M 2.2 in your browser. And it dials out." />
+    <meta property="og:description" content="A real Z80 and CP/M 2.2 with a Hayes modem: real telnet BBSes, handshake sounds, XMODEM and ZMODEM, an AI sysop that writes 8080 code, and the BOFH." />
+    <meta property="og:image" content="https://a-prompt.stern.workers.dev/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="A-Prompt · CP/M 2.2 in your browser. And it dials out." />
+    <meta name="twitter:image" content="https://a-prompt.stern.workers.dev/og.png" />
     <meta name="author" content="Eduardo Stern" />
     <meta name="theme-color" content="#070b09" />
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
-    <title>A-Prompt · CP/M 2.2 emulator for the browser</title>
+    <title>A-Prompt · CP/M 2.2 in your browser. And it dials out.</title>
   </head>
   <body>
     <div class="app">
@@ -218,6 +228,19 @@
 
           <section class="card about" id="about">
             <h2>About</h2>
+            <p class="about-lead">CP/M 2.2 in your browser. <b>And it dials out.</b></p>
+            <ul class="about-features">
+              <li><b>Dial real BBSes.</b> Type <code>TERM</code>, then <code>ATI</code> for the
+                phone book and <code>ATDT&nbsp;1</code> to call. Sound on: dial tone, beeps and
+                the handshake screech.</li>
+              <li><b>Download files.</b> Ctrl-] leaves TERM with the call up; then
+                <code>ZMODEM&nbsp;R</code> or <code>XMODEM</code>.</li>
+              <li><b>Order a program from an AI.</b> <code>ATDT&nbsp;DEEPSEEK</code>: DeepSeek V4.1
+                Flash writes 8080 code, the real ASM.COM assembles it, and it arrives by
+                ZMODEM. Bring your own key (AI board panel).</li>
+              <li><b>Call the BOFH.</b> <code>B</code> on the AI board. He may hang up on you.</li>
+              <li><b>Play.</b> <code>TETRIS</code>, <code>COLOR</code>, or upload Zork and friends.</li>
+            </ul>
             <p>
               A real CP/M 2.2 underneath: a complete Z80 CPU, BDOS with 8.3
               files, FCBs, user areas and console, plus a browser-hosted CCP.
@@ -232,11 +255,9 @@
               memory; uploads are saved in this browser.
             </p>
             <p class="muted">
-              Run TERM to call telnet BBSes through the built-in modem
-              (ATI lists them, ATDT&nbsp;1 dials), then XMODEM or ZMODEM to
-              download and upload files. Boards with a WebSocket gateway are
-              called straight from your browser; for the rest this site's
-              Worker relays the call, to a fixed list of boards only.
+              Boards with a WebSocket gateway are called straight from your
+              browser; for the rest this site's Worker relays the call, to a
+              fixed list of boards only. <code>ATM0</code> silences the modem.
             </p>
             <p class="muted">
               Source, issues and releases:

@@ -5,13 +5,66 @@
 [![GitHub](https://img.shields.io/badge/source-GitHub-181717?style=flat-square)](https://github.com/eduardostern/A-Prompt)
 [![Games](https://img.shields.io/badge/games-RetroArchive-e3d27c?style=flat-square)](http://www.retroarchive.org/cpm/games/games.htm)
 [![Build cost](https://img.shields.io/badge/build%20cost-%3C%241-5ee08f?style=flat-square)](#ai-provenance)
+[![Modem](https://img.shields.io/badge/modem-ATDT%20DEEPSEEK-e3d27c?style=flat-square)](#calling-the-ai-board)
+[![ZMODEM](https://img.shields.io/badge/transfers-XMODEM%20%C2%B7%20ZMODEM-5ee08f?style=flat-square)](#downloading-and-uploading)
 [![License: MIT](https://img.shields.io/badge/license-MIT-5ee08f?style=flat-square)](LICENSE)
 
-**A-Prompt** is a CP/M 2.2 emulator for the browser, written from scratch in
-TypeScript. Under the hood: a complete **Z80 CPU**, a BDOS with 8.3 files,
-FCBs and user areas, a console, and a CCP with the classic commands. It runs
-the original Digital Research binaries distributed at
-[cpm.z80.de](http://www.cpm.z80.de).
+**A-Prompt is a CP/M 2.2 computer in your browser. And it dials out.**
+
+A complete Z80, the original Digital Research software, and a Hayes modem
+that calls **real telnet BBSes still running today**: dial tone, touch
+tones and the full handshake screech included. Download files from them
+with **XMODEM and ZMODEM**. Or dial `DEEPSEEK` and **order a program from
+an AI sysop**: it writes 8080 assembly, assembles it with the real
+`ASM.COM`, fixes its own errors and sends you the `.COM` by ZMODEM. Or ask
+for the **Bastard Operator From Hell**, and listen to him hang up on you.
+
+**[Open the live demo](https://a-prompt.stern.workers.dev)**: no install, no account.
+
+![Calling the AI board from TERM](docs/screenshot-aiboard.png)
+
+## Try it in 30 seconds
+
+```text
+A>TERM                   the terminal program
+ATDT 1                   dial Vertrauen, a Synchronet BBS (turn your sound on)
+...                      Ctrl-] back to CP/M, the call stays up
+
+ATDT DEEPSEEK            the AI board (needs your own DeepSeek key)
+P                        "a number guessing game", name GUESS
+                         ...it writes, assembles, fixes, sends...
+Ctrl-]  ZMODEM R  GUESS  receive it and play
+```
+
+Or stay offline: `TETRIS`, `COLOR`, `DIR`, `STAT`, `ED`, `ASM`, or upload
+Zork, WordStar and MBASIC from your own archive.
+
+## Highlights
+
+- **A real CP/M 2.2.** Every Z80 instruction, documented and not
+  (`zexdoc` and `zexall` pass), Zilog cycle timing at 2, 4 or 8 MHz, and
+  the original DRI binaries: PIP, STAT, ED, ASM, LOAD, DDT, SUBMIT.
+- **Dial real BBSes.** A Hayes-style modem on I/O ports 04h/05h: `ATI`,
+  `ATDT`, `+++`, `ATH`. Boards with a WebSocket gateway are called straight
+  from your browser; the rest through a small Cloudflare Worker relay.
+- **Sounds like the 1990s.** Dial tone, DTMF, ringback, the 2100 Hz answer
+  tone and the training hiss, synthesized, with `CONNECT` waiting for the
+  handshake as it did. `ATM0` for silence. And `^G` rings a VT100 bell at
+  the VT100's own 786 Hz.
+- **File transfers that work.** `XMODEM.COM` and `ZMODEM.COM`, written in
+  8080 assembly and tested byte for byte against lrzsz, including
+  corrupted blocks and restarts.
+- **An AI on the other end of the line.** `ATDT DEEPSEEK` reaches a board
+  run by DeepSeek V4.1 Flash, the model that wrote this emulator. Chat, or
+  order a program that arrives assembled and ready to run. Your key stays
+  in your browser.
+- **The BOFH.** Press `B` and the machine room phone rings. The PFY is
+  listening. Mind the Halon button.
+- **Period terminals.** ANSI/VT100 with CP437, ADM-3A and VT52 emulation.
+- **Real disks.** Mount and export 8" SSSD, 512K, 4 MB and z80pack hard
+  disk images; four drives saved in your browser.
+- **Built by AIs for under $1, then finished properly.** See
+  [AI provenance](#ai-provenance).
 
 > **An effective Sino-American team.** (A few former-OpenAI tokens were harmed after all.)
 >
@@ -28,8 +81,6 @@ the original Digital Research binaries distributed at
 > reviewed and fixed it. No GPT or Grok was consulted. Yes, both are transformers — the only *other* transformer
 > involved is the one in the power supply.
 
-**Live demo:** <https://a-prompt.stern.workers.dev>
-
 **Created by [Eduardo Stern](mailto:eduardostern@icloud.com)** · [GitHub](https://github.com/eduardostern)
 
 The name comes from CP/M's unmistakable `A>` prompt.
@@ -45,7 +96,9 @@ npm run build    # static site in dist/
 npm run preview  # serve the build
 ```
 
-There is no backend and no WebAssembly: `dist/` is a plain static site.
+No WebAssembly: `dist/` is a plain static site. The only server code is
+the Worker's telnet relay (`worker/index.ts`), used for BBSes without a
+WebSocket gateway.
 
 The terminal fills the viewport. Use **Panels** in the console toolbar to hide or show the right rail; its sections collapse and scroll independently (on mobile the rail becomes a drawer).
 

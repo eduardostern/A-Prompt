@@ -478,6 +478,33 @@ body::after {
 .about a:hover { border-color: var(--green); }
 .about .muted { color: var(--muted); font-size: 11px; }
 
+.about .about-lead { font-size: 14px; color: var(--text); margin-bottom: 12px; }
+.about .about-lead b { color: var(--green); font-weight: 600; }
+
+.about-features { margin: 0 0 14px; padding: 0; list-style: none; }
+
+.about-features li {
+  position: relative;
+  margin: 0 0 9px;
+  padding-left: 14px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #b9cdc1;
+}
+
+.about-features li::before { content: '>'; position: absolute; left: 0; color: var(--green); font-family: var(--mono); }
+.about-features b { color: var(--text); font-weight: 600; }
+
+.about code {
+  padding: 0 4px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--green);
+  font-family: var(--mono);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
 .provenance {
   margin-top: 12px;
   padding-top: 10px;
