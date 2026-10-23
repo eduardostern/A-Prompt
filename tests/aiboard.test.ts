@@ -5,7 +5,9 @@ import { describe, expect, it } from 'vitest';
 import { CpmMachine } from '../src/cpm/machine';
 import { BUILTIN_FILES } from '../src/assets/builtin-programs';
 import type { ConsoleIO } from '../src/console';
-import { BOFH_PICKUP, FIX_PROMPT, createAiBoard, programName, sourceText } from '../src/aiboard';
+import {
+  BOFH_PICKUP, FIX_PROMPT, MAX_HISTORY_CHARS, createAiBoard, programName, sourceText, trimHistory,
+} from '../src/aiboard';
 import { assemble } from '../src/cpm/assembler';
 import type { ChatOptions, ChatChunk } from '../src/deepseek';
 
@@ -171,6 +173,62 @@ describe('AI board', () => {
     expect(b.con.output).toContain('Hello from the AI board');
     await b.waitFor('Run HELLO2 at the A> prompt.');
   }, 30_000);
+
+  it('takes more changes after a build, with the whole conversation, until Enter', async () => {
+    const b = setup('sk-test');
+    b.type('ATDT AI\r');
+    await b.waitFor('Choice: ');
+    b.answers.push([{ kind: 'text', text: FIXED }]);
+    b.type('P');
+    await b.waitFor('Program: ');
+    b.type('say hello\r');
+    await b.waitFor('Name');
+    b.type('hello3\r');
+    await b.waitFor('by ZMODEM now');
+    await b.machine.runCom(b.machine.disk.find(0, 'ZMODEM  ', 'COM')!, 'ZMODEM R');
+    await b.waitFor('Change: ');
+    expect(b.screen()).toContain('More changes to HELLO3?');
+
+    // Second pass: DeepSeek gets the first request, its own source and the new ask.
+    const LOUDER = FIXED.replace('Hello from the AI board', 'HELLO FROM THE AI BOARD');
+    b.answers.push([{ kind: 'text', text: LOUDER }]);
+    b.type('shout it\r');
+    await b.waitFor('ZMODEM R replaces your HELLO3.ASM');
+    const second = b.calls[1].messages;
+    expect(second[1].content).toContain('say hello');
+    expect(second[2].role).toBe('assistant');
+    expect(second[2].content).toContain("DB\t'Hello from the AI board'");
+    expect(second[3].content).toContain('asks for more: shout it');
+
+    await b.machine.runCom(b.machine.disk.find(0, 'ZMODEM  ', 'COM')!, 'ZMODEM R');
+    b.con.output = '';
+    await b.machine.runCom(b.machine.disk.find(0, 'HELLO3  ', 'COM')!, 'HELLO3');
+    expect(b.con.output).toContain('HELLO FROM THE AI BOARD');
+
+    // Enter alone ends the session (once the transfer's trailing bytes are past).
+    await b.waitFor('Change: ');
+    await new Promise((r) => setTimeout(r, 1600));
+    b.type('\r');
+    await b.waitFor('Choice: ');
+  }, 30_000);
+
+  it('keeps a long session within the history limit, latest source last', () => {
+    const big = 'x'.repeat(60_000);
+    const msgs = [
+      { role: 'system' as const, content: 'rules' },
+      { role: 'user' as const, content: 'write it' },
+      ...Array.from({ length: 6 }, (_, i) => [
+        { role: 'assistant' as const, content: `${i}${big}` },
+        { role: 'user' as const, content: `change ${i}` },
+      ]).flat(),
+    ];
+    trimHistory(msgs);
+    expect(msgs.reduce((n, m) => n + m.content.length, 0)).toBeLessThanOrEqual(MAX_HISTORY_CHARS);
+    expect(msgs[0].content).toBe('rules');
+    expect(msgs[1].content).toBe('write it');
+    expect(msgs.at(-1)!.content).toBe('change 5');
+    expect(msgs.at(-2)!.content.startsWith('5')).toBe(true);
+  });
 
   it('treats an answer with no source (all thinking) as a failed try', async () => {
     const b = setup('sk-test');

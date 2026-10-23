@@ -267,6 +267,11 @@ the whole corrected source. It goes through the same assemble-and-retry
 loop and comes back as `GAME.ASM` and `GAME.COM` by `ZMODEM R`, replacing
 your copy (`REN` it first to keep the old one). Text sources up to 64K.
 
+Both `P` and `F` keep going: after each transfer the board asks for more
+changes ("make it faster", "add a high score") and DeepSeek works on the
+same program with the whole conversation in mind, every version and
+every error so far. Enter alone goes back to the menu.
+
 The board needs your own DeepSeek API key; calls are billed to your
 DeepSeek account. To get one:
 

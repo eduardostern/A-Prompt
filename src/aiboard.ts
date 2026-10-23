@@ -175,13 +175,29 @@ const ERROR_LETTERS = `Error letters: D data, E expression, L label, N not imple
 (string too long), P phase, R register, S syntax, U undefined symbol, V value.`;
 
 /** The source inside a code fence, if the model used one anyway. */
+/** After a transfer, how long control bytes on an empty line count as its debris. */
+const SETTLE_MS = 1500;
+
+/** Characters of conversation kept for a program session (DeepSeek's context is large, not endless). */
+export const MAX_HISTORY_CHARS = 200_000;
+
+/**
+ * Drops the oldest turns after the first two (the instructions and the
+ * request or upload) until the conversation fits MAX_HISTORY_CHARS. The
+ * latest source and request always stay.
+ */
+export function trimHistory(messages: ChatMessage[]): void {
+  const size = () => messages.reduce((n, m) => n + m.content.length, 0);
+  while (size() > MAX_HISTORY_CHARS && messages.length > 4) messages.splice(2, 2);
+}
+
 export function cleanSource(text: string): string {
   const fence = /```[a-zA-Z0-9]*\r?\n([\s\S]*?)```/.exec(text);
   const src = (fence ? fence[1] : text).replace(/\r/g, '');
   return src.replace(/^\n+/, '').replace(/\s+$/, '') + '\n';
 }
 
-type Mode = 'key' | 'menu' | 'chat' | 'describe' | 'name' | 'busy' | 'zmodem' | 'upload' | 'fix' | 'bye';
+type Mode = 'key' | 'menu' | 'chat' | 'describe' | 'name' | 'busy' | 'zmodem' | 'upload' | 'fix' | 'more' | 'bye';
 
 /**
  * An uploaded file as 8080 source text: up to the first ^Z, CR LF to LF,
@@ -253,6 +269,17 @@ class AiBoard implements Link {
   /** The uploaded source to fix, and what ASM said about it. */
   private fixSource = '';
   private fixErrors: string[] = [];
+  /**
+   * The program being worked on: the whole conversation with DeepSeek (the
+   * request or upload, every version, ASM's errors), so after each build the
+   * caller can ask for more changes in context.
+   */
+  private session?: { name: string; messages: ChatMessage[] };
+  /** Until when (ms) control bytes on an empty line are transfer debris. */
+  private settleUntil = 0;
+  private now(): number {
+    return (this.deps.now ?? Date.now)();
+  }
   /** The last answer ended in [HANGUP]. */
   private hungUp = false;
   private progName = '';
@@ -374,6 +401,10 @@ class AiBoard implements Link {
   // ---- input ---------------------------------------------------------
 
   private key(b: number): void {
+    // The end of a ZMODEM transfer trails a few control bytes (the ZFIN
+    // header's CR LF and XON). For a moment, a control byte on an empty line
+    // is that, not the caller pressing Enter.
+    if (b < 32 && !this.line && this.now() < this.settleUntil) return;
     switch (this.mode) {
       case 'menu': return this.menuKey(b);
       case 'busy':
@@ -456,6 +487,14 @@ class AiBoard implements Link {
       case 'fix':
         this.progText = text || 'Make it assemble without errors and fix any bugs you find.';
         void this.fixProgram();
+        return;
+      case 'more':
+        if (!text || text.toLowerCase() === '/menu') {
+          this.session = undefined;
+          this.menu();
+          return;
+        }
+        void this.revise(text);
         return;
       case 'name': {
         const name = text.toUpperCase();
@@ -560,6 +599,7 @@ class AiBoard implements Link {
   private async makeProgram(): Promise<void> {
     const name = this.progName;
     this.fixSource = '';
+    this.session = undefined;
     this.say(`\r\nWriting ${name}.ASM with DeepSeek V4.1 Flash. This can take a minute;\r\nESC gives up.\r\n`);
     await this.build(name, [
       { role: 'system', content: PROGRAM_PROMPT },
@@ -569,6 +609,7 @@ class AiBoard implements Link {
 
   private async fixProgram(): Promise<void> {
     const name = this.progName;
+    this.session = undefined;
     this.say(`\r\nFixing ${name}.ASM with DeepSeek V4.1 Flash. This can take a minute;\r\nESC gives up.\r\n`);
     const errors = this.fixErrors.length
       ? `ASM 2.0 reported these errors (letter, address, line):\n${this.fixErrors.join('\n')}\n${ERROR_LETTERS}`
@@ -584,14 +625,39 @@ class AiBoard implements Link {
     this.fixSource = '';
   }
 
+  /** Another pass on the session's program, with everything said so far. */
+  private async revise(text: string): Promise<void> {
+    const s = this.session!;
+    s.messages.push({
+      role: 'user',
+      content: `The caller ran ${s.name} and asks for more: ${text}\n` +
+        'Make that change and keep the rest of the program as it is. Output the whole source again, only the source.',
+    });
+    trimHistory(s.messages);
+    this.say(`\r\nChanging ${s.name}.ASM with DeepSeek V4.1 Flash. This can take a minute;\r\nESC gives up.\r\n`);
+    await this.build(s.name, s.messages);
+  }
+
+  /** After a transfer: more changes in the same conversation, or the menu. */
+  private morePrompt(): void {
+    this.say(`\r\nMore changes to ${this.session!.name}? Describe them in one line, or press\r\n` +
+      'Enter alone for the menu. DeepSeek remembers this program and what you asked.\r\n\r\nChange: ');
+    this.mode = 'more';
+    this.line = '';
+    this.settleUntil = this.now() + SETTLE_MS;
+  }
+
   /** Asks for the source, assembles it (errors go back, three tries) and sends it. */
   private async build(name: string, messages: ChatMessage[]): Promise<void> {
+    // A revision replaces what the caller downloaded last time.
+    const replaces = Boolean(this.fixSource) || this.session?.messages === messages;
+    this.session = { name, messages };
     let source = '';
     let result: AssemblyResult | undefined;
     for (let attempt = 1; attempt <= FIX_TRIES; attempt++) {
       const answer = await this.ask(messages, { thinking: true, show: 'dots' });
       if (this.closed) return;
-      if (answer === undefined) { if (this.mode === 'busy') this.menu(); return; }
+      if (answer === undefined) { this.session = undefined; if (this.mode === 'busy') this.menu(); return; }
       source = cleanSource(answer);
       if (!/^\s*[A-Z]*:?\s*ORG\b/im.test(source)) {
         // All thinking and no answer (or prose instead of code).
@@ -603,6 +669,7 @@ class AiBoard implements Link {
           continue;
         }
         this.say('Giving up; try a simpler description.\r\n');
+        this.session = undefined;
         this.menu();
         return;
       }
@@ -632,7 +699,7 @@ class AiBoard implements Link {
       `\r\nSending ${files.map((f) => f.name).join(' and ')} by ZMODEM now.\r\n` +
       'In TERM press Ctrl-], type ZMODEM R, then TERM to come back here.\r\n',
     );
-    if (this.fixSource) this.say(`ZMODEM R replaces your ${name}.ASM: REN it first to keep the old one.\r\n`);
+    if (replaces) this.say(`ZMODEM R replaces your ${name}.ASM: REN it first to keep the old one.\r\n`);
     this.startZmodem(files);
   }
 
@@ -688,7 +755,8 @@ class AiBoard implements Link {
       this.say(ok
         ? `\r\n\r\nTransfer complete. Run ${this.progName} at the A> prompt.\r\n`
         : `\r\n\r\nTransfer stopped: ${why}.\r\n`);
-      this.menu();
+      if (this.session) this.morePrompt();
+      else this.menu();
     }, now);
     this.runTransfer(this.sender);
   }

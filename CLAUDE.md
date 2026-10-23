@@ -160,6 +160,11 @@ user/drive; the CCP restores both from it after each program.
   to 64K from `ZMODEM S`; `sourceText` cuts it at ^Z; the board assembles
   it, asks what to change, and runs `FIX_PROMPT` (PROGRAM_PROMPT plus "keep
   the rest") through the same `build()` loop and sender.
+- `build()` keeps the conversation in `session`; after the transfer the
+  board asks for more changes (`'more'` mode), appends them and builds
+  again, `trimHistory` capping it at `MAX_HISTORY_CHARS`. For 1.5 s after
+  a transfer, control bytes on an empty line are ZMODEM debris (the ZFIN
+  header's CR LF XON), not Enter.
 - Chat personas live in `PERSONAS` (`[C]` sysop, `[B]` BOFH, each with its
   own history). The BOFH may end a reply with `[HANGUP]`: the board strips
   it, even split across chunks, and drops the line.
