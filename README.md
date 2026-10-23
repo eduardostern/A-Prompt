@@ -85,7 +85,7 @@ Zork, WordStar and MBASIC from your own archive.
 
 The name comes from CP/M's unmistakable `A>` prompt.
 
-![A-Prompt terminal](docs/screenshot.png)
+![TERM listing the modem's phone book of BBSes](docs/screenshot.png)
 
 ## Run
 
