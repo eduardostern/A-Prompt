@@ -20,6 +20,11 @@ export { BDOS_ENTRY };
  * and the BIOS are intercepted by the host so they can be implemented in
  * TypeScript and, where needed, await keyboard input.
  */
+/** What the machine calls itself at power-on. */
+const MACHINE_NAME = 'A-PROMPT 64';
+const BIOS_VERSION = 'v1.0';
+const CONTACT = 'eduardostern@icloud.com';
+
 export class CpmMachine {
   readonly cpu = new Z80();
   readonly drives: Disk[] = [new Disk('A'), new Disk('B'), new Disk('C'), new Disk('D')];
@@ -95,23 +100,43 @@ export class CpmMachine {
     m[BDOS_ENTRY] = 0xc9;
   }
 
+  /** Size of a drive as the banner shows it: 243K, 4M. */
+  private driveSize(d: Disk): string {
+    const kb = Math.round(((d.format.dsm + 1) * d.format.blockSize) / 1024);
+    return kb < 1024 ? `${kb}K` : `${Math.round(kb / 1024)}M`;
+  }
+
+  /** The power-on screen: a bell, then the machine's sign-on. */
   private printBanner(): void {
     const c = this.console;
-    c.write('\r\n');
+    const mhz = this.clockHz ? `${+(this.clockHz / 1e6).toFixed(2)} MHz` : 'full speed';
+    const drives = this.drives.map((d) => `${d.label}:${this.driveSize(d)}`).join(' ');
+    c.write('\x07\r\n');
     if (c.columns < 60) {
-      c.write('  ==========================\r\n');
-      c.write('   A-PROMPT · CP/M 2.2 · Z80\r\n');
-      c.write('  ==========================\r\n');
-      c.write('\r\n  Type HELP for commands.\r\n');
-      c.write('  Try: DIR, HELLO, TETRIS, STAT.\r\n\r\n');
+      c.write(`  ${MACHINE_NAME}\r\n`);
+      c.write(`  Z80 computer, BIOS ${BIOS_VERSION}\r\n`);
+      c.write(`  ${CONTACT}\r\n\r\n`);
+      c.write(`  CPU   Z80 @ ${mhz}\r\n`);
+      c.write('  RAM   64K OK\r\n');
+      c.write(`  Disk  ${drives}\r\n`);
+      c.write('  Modem Hayes, ports 04h/05h\r\n\r\n');
+      c.write('  CP/M 2.2 (c) 1979 Digital Research\r\n');
+      c.write('  Type HELP. Try DIR, TETRIS, TERM.\r\n\r\n');
       return;
     }
-    const line = '─'.repeat(44);
-    c.write(`  ┌${line}┐\r\n`);
-    c.write('  │  A-PROMPT  ·  CP/M 2.2  ·  Z80  ·  64K RAM │\r\n');
-    c.write(`  └${line}┘\r\n`);
-    c.write('\r\n  CP/M 2.2 in your browser. Type HELP for commands.\r\n');
-    c.write('  Sample programs: PIP, STAT, DDT, ED, ASM, HELLO, TETRIS, TERM.\r\n\r\n');
+    const w = 54;
+    const row = (text: string) => c.write(`  │ ${text.padEnd(w - 2)} │\r\n`);
+    c.write(`  ┌${'─'.repeat(w)}┐\r\n`);
+    row(`${MACHINE_NAME}  ·  Z80 Personal Computer`);
+    row(`ROM BIOS ${BIOS_VERSION}  ·  ${CONTACT}`);
+    c.write(`  └${'─'.repeat(w)}┘\r\n\r\n`);
+    c.write(`  CPU ....... Zilog Z80 @ ${mhz}\r\n`);
+    c.write('  Memory .... 64K RAM OK, 63K TPA (0100h-FBFFh)\r\n');
+    c.write(`  Drives .... ${drives}\r\n`);
+    c.write('  Modem ..... Hayes AT, telnet line on ports 04h/05h\r\n\r\n');
+    c.write('  CP/M 2.2  -  Copyright (c) 1979 Digital Research\r\n');
+    c.write('  Type HELP for commands. Try DIR, TETRIS, or TERM and\r\n');
+    c.write('  ATDT AI to call the AI board.\r\n\r\n');
   }
 
   async start(): Promise<void> {

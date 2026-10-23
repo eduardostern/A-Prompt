@@ -8,6 +8,7 @@ import { BUILTIN_FILES } from './assets/builtin-programs';
 import type { Dialer, Link, LinkHandlers } from './cpm/modem';
 import { createAiBoard } from './aiboard';
 import { withCallSound } from './call-sound';
+import { audioContext } from './audio';
 import { startCallSound } from './modem-audio';
 import { assemble } from './cpm/assembler';
 import { streamChat } from './deepseek';
@@ -947,6 +948,15 @@ window.setInterval(() => {
 applyFontSize();
 statusText.textContent = 'READY';
 con.focus();
+// Browsers keep audio paused until the first click or key; the power-on bell
+// waits on the paused clock and sounds then.
+const wakeAudio = () => {
+  audioContext();
+  window.removeEventListener('pointerdown', wakeAudio, true);
+  window.removeEventListener('keydown', wakeAudio, true);
+};
+window.addEventListener('pointerdown', wakeAudio, true);
+window.addEventListener('keydown', wakeAudio, true);
 requestAnimationFrame(() => {
   con.fit();
   machine.start().catch((err: unknown) => {
