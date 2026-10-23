@@ -122,6 +122,28 @@ describe('CP/M 2.2 machine', () => {
     expect(sleeps.reduce((a, b) => a + b, 0)).toBe(72);
   });
 
+  it('assembles every built-in source on drive A: (CP/M text: CR LF, ^Z)', async () => {
+    // The sources are LF text in the repo. DRI's ASM ends lines at the CR,
+    // so on the disk without CR LF a source is one huge line: COLOR
+    // assembled to nothing and JOSHUA hung ASM.
+    for (const name of ['HELLO', 'COLOR', 'JOSHUA', 'TERM']) {
+      const { machine, con } = boot();
+      machine.yieldFn = () => new Promise((r) => setImmediate(r));
+      const asm = machine.disk.find(0, 'ASM     ', 'COM')!;
+      const run = machine.runCom(asm, `ASM ${name}`);
+      const hung = await Promise.race([
+        run.then(() => false),
+        new Promise<boolean>((r) => setTimeout(() => r(true), 20_000)),
+      ]);
+      if (hung) machine.stop();
+      expect(hung, `ASM ${name} never finished`).toBe(false);
+      expect(con.output).toContain('END OF ASSEMBLY');
+      const hex = machine.disk.find(0, name.padEnd(8), 'HEX');
+      // At least one data record: the program really assembled.
+      expect(String.fromCharCode(...(hex?.data ?? [])), `${name}.HEX`).toMatch(/^:[1-9A-F]/m);
+    }
+  }, 120_000);
+
   it('returns to the CCP when a program halts the CPU', async () => {
     const { machine, con } = boot();
     machine.disk.put('HALT', 'COM', new Uint8Array([0x76]));

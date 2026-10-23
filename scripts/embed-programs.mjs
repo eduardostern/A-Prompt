@@ -15,10 +15,22 @@ const files = readdirSync(dir)
   .filter((f) => /\.(com|asm|txt|sub|hex)$/i.test(f))
   .sort();
 
+/**
+ * Sources are kept as ordinary text in the repo; on the CP/M disk they need
+ * CR LF line ends (DRI's ASM ends lines at the CR) and a final ^Z, the same
+ * rule as src/cpm/text.ts, which uploads go through.
+ */
+function cpmText(buf) {
+  if (buf.includes(0x1a)) return buf;
+  const text = buf.toString('latin1').replace(/\r?\n/g, '\r\n');
+  return Buffer.from((text.endsWith('\r\n') ? text : text + '\r\n') + '\x1a', 'latin1');
+}
+
 const entries = files.map((f) => {
-  const data = readFileSync(join(dir, f));
   const name = basename(f, extname(f)).toUpperCase();
   const ext = extname(f).slice(1).toUpperCase();
+  const raw = readFileSync(join(dir, f));
+  const data = ['ASM', 'SUB', 'TXT'].includes(ext) ? cpmText(raw) : raw;
   return { name, ext, data: data.toString('base64') };
 });
 

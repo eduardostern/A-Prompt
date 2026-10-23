@@ -11,6 +11,7 @@ import { withCallSound } from './call-sound';
 import { audioContext } from './audio';
 import { setupDisplay } from './display-ui';
 import { askConfirm } from './confirm';
+import { TEXT_EXTENSIONS, toCpmText } from './cpm/text';
 import { waitForPower, warmUp } from './power';
 import { MachineSounds } from './drive-sound';
 import { DriveSetup, DriveTiming, SETUPS } from './drives';
@@ -657,8 +658,10 @@ async function importFiles(list: FileList | File[]): Promise<void> {
       con.write(`\r\n* ${file.name}: too large (512 KB maximum).\r\n`);
       continue;
     }
-    const data = new Uint8Array(await file.arrayBuffer());
     const cpm = toCpmName(file.name);
+    const raw = new Uint8Array(await file.arrayBuffer());
+    // Text from a modern editor gets CP/M's CR LF and ^Z, or ASM and SUBMIT choke on it.
+    const data = TEXT_EXTENSIONS.has(cpm.ext.trim()) ? toCpmText(raw) : raw;
     const target = uniqueName(disk, machine.bdos.user, cpm.name, cpm.ext);
     const stored = disk.put(target.name, target.ext, data, machine.bdos.user);
     if (!stored) {

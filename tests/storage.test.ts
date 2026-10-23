@@ -57,3 +57,23 @@ describe('file drive storage', () => {
     expect(decodeFiles({ ...encodeFiles(packed), size: 1 })).toBeNull();
   });
 });
+
+import { toCpmText } from '../src/cpm/text';
+
+describe('CP/M text', () => {
+  const bytes = (s: string) => Uint8Array.from([...s].map((c) => c.charCodeAt(0)));
+  const str = (b: Uint8Array) => String.fromCharCode(...b);
+
+  it('gives modern text CR LF line ends and a ^Z', () => {
+    expect(str(toCpmText(bytes('\tORG\t100H\n\tEND\n')))).toBe('\tORG\t100H\r\n\tEND\r\n\x1a');
+    expect(str(toCpmText(bytes('no newline')))).toBe('no newline\r\n\x1a');
+    expect(str(toCpmText(bytes('dos\r\ntext\r\n')))).toBe('dos\r\ntext\r\n\x1a');
+  });
+
+  it('leaves CP/M text and binary files alone', () => {
+    const cpm = bytes('A\r\n\x1a\x1a');
+    expect(toCpmText(cpm)).toBe(cpm);
+    const com = Uint8Array.from([0xc3, 0x00, 0x01, 0x0a]);
+    expect(toCpmText(com)).toBe(com);
+  });
+});
