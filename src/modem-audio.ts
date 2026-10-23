@@ -19,6 +19,9 @@ const DTMF: Record<string, [number, number]> = {
   '*': [941, 1209], 0: [941, 1336], '#': [941, 1477],
 };
 
+/** Seconds of tone in each ringback cycle. */
+const RING_ON = 1.2;
+
 /** A made-up but stable phone number for a host: 1, area code, number. */
 export function digitsFor(target: string): string {
   let h = 0x811c9dc5;
@@ -29,7 +32,7 @@ export function digitsFor(target: string): string {
 
 /** Schedules sounds into `dest` and can stop them all. */
 export class Synth {
-  private nodes: AudioScheduledSourceNode[] = [];
+  private nodes: { node: AudioScheduledSourceNode; end: number }[] = [];
   private seed = 1;
 
   constructor(readonly ctx: BaseAudioContext, readonly dest: AudioNode) {}
@@ -57,7 +60,7 @@ export class Synth {
     o.connect(into);
     o.start(t);
     o.stop(t + dur + 0.01);
-    this.nodes.push(o);
+    this.nodes.push({ node: o, end: t + dur + 0.01 });
     return o;
   }
 
@@ -83,7 +86,7 @@ export class Synth {
 
   /** One ring of ringback; returns when the next ring would start. */
   ring(t: number): number {
-    this.tones([440, 480], t, 1.2, 0.35);
+    this.tones([440, 480], t, RING_ON, 0.35);
     return t + 3;
   }
 
@@ -107,7 +110,7 @@ export class Synth {
     src.connect(band).connect(this.envelope(t, dur, level));
     src.start(t);
     src.stop(t + dur + 0.01);
-    this.nodes.push(src);
+    this.nodes.push({ node: src, end: t + dur + 0.01 });
   }
 
   /** V.21 FSK: random bits at 300 baud between the mark and space tones. */
@@ -132,7 +135,7 @@ export class Synth {
     lfo.connect(depth).connect(am.gain);
     lfo.start(t);
     lfo.stop(t + ans + 0.01);
-    this.nodes.push(lfo);
+    this.nodes.push({ node: lfo, end: t + ans + 0.01 });
     this.osc(2100, t, ans, am);
     for (let r = t + 0.45; r < t + ans; r += 0.45) {
       am.gain.setValueAtTime(0.8, r - 0.004);
@@ -158,11 +161,17 @@ export class Synth {
     return t + 1.0;
   }
 
+  /** Silences everything from time t on; sounds that end before t still play. */
+  stopFrom(t: number): void {
+    this.nodes = this.nodes.filter(({ node, end }) => {
+      if (end <= t) return true;
+      try { node.stop(t); } catch { /* not started */ }
+      return false;
+    });
+  }
+
   stopAll(): void {
-    for (const n of this.nodes) {
-      try { n.stop(); } catch { /* not started or already stopped */ }
-    }
-    this.nodes = [];
+    this.stopFrom(0);
   }
 }
 
@@ -195,18 +204,28 @@ function lineOut(ctx: AudioContext, volume: number): AudioNode {
 export function startCallSound(target: string, volume: number): CallSound | undefined {
   const ctx = audioContext();
   if (!ctx) return undefined;
-  const out = lineOut(ctx, volume);
+  return playCall(ctx, lineOut(ctx, volume), target);
+}
+
+/** The sounds of a call to `target` into `out`, starting now. */
+export function playCall(ctx: BaseAudioContext, out: AudioNode, target: string): CallSound {
   const synth = new Synth(ctx, out);
   let t = ctx.currentTime + 0.05;
   t = synth.dialTone(t);
   const dialed = synth.dtmf(t + 0.1, digitsFor(target)) + 0.4;
+  const rings: number[] = [];
   let nextRing = dialed;
   let done = false;
   let ringTimer: ReturnType<typeof setTimeout> | undefined;
+  const ringOnce = () => {
+    const at = Math.max(nextRing, ctx.currentTime);
+    rings.push(at);
+    nextRing = synth.ring(at);
+  };
   // Ring until the far end answers.
   const ring = () => {
     if (done) return;
-    nextRing = synth.ring(Math.max(nextRing, ctx.currentTime));
+    ringOnce();
     ringTimer = setTimeout(ring, (nextRing - ctx.currentTime - 0.2) * 1000);
   };
   ringTimer = setTimeout(ring, Math.max(0, (dialed - ctx.currentTime - 0.2) * 1000));
@@ -217,16 +236,21 @@ export function startCallSound(target: string, volume: number): CallSound | unde
   return {
     answered() {
       finish();
-      synth.stopAll();
-      // Answer once the number is dialed, as a real call would.
-      const start = Math.max(ctx.currentTime + 0.05, dialed);
+      // The relay connects long before the number is dialed: let the digits
+      // play and ring at least once, then answer when that ring ends.
+      if (rings.length === 0) ringOnce();
+      const now = ctx.currentTime;
+      const current = rings.filter((r) => r <= now).pop() ?? rings[0];
+      const start = Math.max(now + 0.05, current + RING_ON + 0.3);
+      synth.stopFrom(start);
       const end = new Synth(ctx, out).handshake(start, digitsFor(target).length + target.length);
       return new Promise((resolve) => setTimeout(resolve, (end - ctx.currentTime) * 1000));
     },
     failed() {
       finish();
-      synth.stopAll();
-      new Synth(ctx, out).busy(Math.max(ctx.currentTime + 0.05, dialed - 0.3));
+      const start = Math.max(ctx.currentTime + 0.05, dialed - 0.3);
+      synth.stopFrom(start);
+      new Synth(ctx, out).busy(start);
     },
     stop() {
       finish();
