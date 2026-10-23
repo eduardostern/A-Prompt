@@ -5,7 +5,8 @@
 import type { ITheme } from '@xterm/xterm';
 
 export type FontId = 'modern' | 'glass' | 'vt323' | 'vga';
-export type Phosphor = 'color' | 'green' | 'amber' | 'white';
+/** 'color' and 'colorwhite' keep the ANSI palette; the rest are one-colour monitors. */
+export type Phosphor = 'color' | 'colorwhite' | 'green' | 'amber' | 'white';
 export type Scanlines = 'off' | 'light' | 'heavy';
 export type Signal = 'rgb' | 'ntsc' | 'pal';
 
@@ -64,13 +65,14 @@ export const MODERN_DISPLAY: DisplaySettings = {
 /** Background that goes with each phosphor when it is picked. */
 export const PHOSPHOR_BACKGROUND: Record<Phosphor, string> = {
   color: '#08110b',
+  colorwhite: '#08090c',
   green: '#031006',
   amber: '#0d0800',
   white: '#08090c',
 };
 
 /** P1 green, P3 amber, P4 white. */
-const PHOSPHOR_RGB: Record<Exclude<Phosphor, 'color'>, string> = {
+const PHOSPHOR_RGB: Record<Exclude<Phosphor, 'color' | 'colorwhite'>, string> = {
   green: '#41ff7a',
   amber: '#ffb52e',
   white: '#e6edff',
@@ -80,7 +82,7 @@ export const PRESETS: Record<string, { label: string; short: string; settings: D
   eduardo: {
     label: "Eduardo's", short: 'Eduardo',
     settings: {
-      font: 'glass', size: 0, phosphor: 'white', background: PHOSPHOR_BACKGROUND.white,
+      font: 'glass', size: 0, phosphor: 'colorwhite', background: PHOSPHOR_BACKGROUND.colorwhite,
       scanlines: 'light', glow: false, flicker: false, curve: false, interference: false, signal: 'rgb',
     },
   },
@@ -135,7 +137,7 @@ export function parseDisplay(json: string | null): DisplaySettings {
   return {
     font: pick(raw.font, Object.keys(FONTS) as FontId[], d.font),
     size: SIZES.includes(raw.size as number) ? (raw.size as number) : d.size,
-    phosphor: pick(raw.phosphor, ['color', 'green', 'amber', 'white'], d.phosphor),
+    phosphor: pick(raw.phosphor, ['color', 'colorwhite', 'green', 'amber', 'white'], d.phosphor),
     background: typeof raw.background === 'string' && /^#[0-9a-f]{6}$/i.test(raw.background) ? raw.background : d.background,
     scanlines: pick(raw.scanlines, ['off', 'light', 'heavy'], d.scanlines),
     glow: bool('glow'),
@@ -219,9 +221,22 @@ const COLOR_THEME: ITheme = {
   brightWhite: '#f2fff7',
 };
 
+/** The colour palette with white text and neutral greys. */
+const COLOR_WHITE_THEME: ITheme = {
+  ...COLOR_THEME,
+  foreground: '#e6e9ef',
+  cursor: '#ffffff',
+  selectionBackground: '#3a4150',
+  white: '#d0d4dc',
+  brightBlack: '#6e7681',
+  brightWhite: '#ffffff',
+};
+
 /** The main text colour, for the glow. */
 export function textColor(s: DisplaySettings): string {
-  return s.phosphor === 'color' ? (COLOR_THEME.foreground as string) : PHOSPHOR_RGB[s.phosphor];
+  if (s.phosphor === 'color') return COLOR_THEME.foreground as string;
+  if (s.phosphor === 'colorwhite') return COLOR_WHITE_THEME.foreground as string;
+  return PHOSPHOR_RGB[s.phosphor];
 }
 
 /**
@@ -230,8 +245,9 @@ export function textColor(s: DisplaySettings): string {
  */
 export function terminalTheme(s: DisplaySettings): ITheme {
   const bg = s.background;
-  if (s.phosphor === 'color') {
-    return { ...COLOR_THEME, background: bg, black: bg, cursorAccent: bg };
+  if (s.phosphor === 'color' || s.phosphor === 'colorwhite') {
+    const base = s.phosphor === 'color' ? COLOR_THEME : COLOR_WHITE_THEME;
+    return { ...base, background: bg, black: bg, cursorAccent: bg };
   }
   const p = PHOSPHOR_RGB[s.phosphor];
   const shade = (t: number) => mix(bg, p, t);

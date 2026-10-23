@@ -5,7 +5,7 @@ describe('display settings', () => {
   it("a first visit gets Eduardo's look: VT220 at 28 px, white phosphor, no effects", () => {
     expect(DEFAULT_DISPLAY).toEqual(PRESETS.eduardo.settings);
     expect(DEFAULT_DISPLAY).toMatchObject({
-      font: 'glass', size: 0, phosphor: 'white', scanlines: 'light', signal: 'rgb',
+      font: 'glass', size: 0, phosphor: 'colorwhite', scanlines: 'light', signal: 'rgb',
       glow: false, flicker: false, curve: false, interference: false,
     });
   });
@@ -52,6 +52,13 @@ describe('display settings', () => {
     expect(t.extendedAnsi).toHaveLength(240);
     expect(t.extendedAnsi![0]).toBe('#000000');
     expect(t.extendedAnsi![231 - 16]).toBe('#ffb52e');
+  });
+
+  it("Eduardo's look shows colours, with white text", () => {
+    const t = terminalTheme(DEFAULT_DISPLAY);
+    expect(t.red).not.toBe(t.blue);
+    expect(t.brightWhite).toBe('#ffffff');
+    expect(t.foreground).toBe('#e6e9ef');
   });
 
   it('the colour look keeps the ANSI palette on the chosen background', () => {
