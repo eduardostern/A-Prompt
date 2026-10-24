@@ -15,7 +15,7 @@ class FakeSound implements CallSound {
 
 function setup() {
   const sound = new FakeSound();
-  let far!: LinkHandlers;
+  let far: LinkHandlers | undefined;
   let closed = false;
   const inner: Dialer = (_t, h) => { far = h; return { send: () => {}, close: () => { closed = true; } }; };
   const modem = new Modem({ dialer: withCallSound(inner, () => sound) });
@@ -23,41 +23,42 @@ function setup() {
   const drain = () => { let s = ''; while (modem.available) s += String.fromCharCode(modem.read()); return s; };
   type('ATDT1\r');
   drain();
-  return { sound, far: () => far, modem, drain, closed: () => closed, type };
+  return { sound, far: () => far!, opened: () => far !== undefined, modem, drain, closed: () => closed, type };
 }
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
 describe('modem speaker', () => {
-  it('holds CONNECT and early data until the handshake has played', async () => {
+  it('plays the whole call before connecting, then passes the BBS through at once', async () => {
     const t = setup();
-    t.far().onOpen();
-    t.far().onData(Uint8Array.from([72, 105]));
-    await flush();
-    expect(t.drain()).toBe('');
-    expect(t.modem.online).toBe(false);
+    // Dial tone, digits, ring, handshake: no connection yet, so the BBS's
+    // clock has not started and its terminal probes cannot go unanswered.
+    expect(t.opened()).toBe(false);
     t.sound.finishHandshake();
     await flush();
-    expect(t.drain()).toBe('\r\nCONNECT\r\nHi');
+    expect(t.opened()).toBe(true);
+    t.far().onOpen();
+    expect(t.drain()).toBe('\r\nCONNECT\r\n');
     expect(t.modem.online).toBe(true);
-    t.far().onData(Uint8Array.from([33]));
-    expect(t.drain()).toBe('!');
+    t.far().onData(Uint8Array.from([0x1b, 0x5b, 0x36, 0x6e])); // ESC[6n, straight away
+    expect(t.drain()).toBe('\x1b[6n');
   });
 
   it('plays busy when the call fails, and stops on hang-up', async () => {
     const t = setup();
+    t.sound.finishHandshake();
+    await flush();
     t.far().onClose();
-    expect(t.sound.log).toEqual(['failed']);
+    expect(t.sound.log).toEqual(['answered', 'failed']);
     expect(t.drain()).toContain('NO CARRIER');
 
     const u = setup();
-    u.far().onOpen();
     u.type('x'); // a key while dialing hangs up
-    expect(u.closed()).toBe(true);
     expect(u.sound.log).toEqual(['answered', 'stop']);
     u.sound.finishHandshake();
     await flush();
-    expect(u.modem.online).toBe(false); // no late CONNECT
+    expect(u.opened()).toBe(false); // the call was abandoned: never connects
+    expect(u.modem.online).toBe(false);
   });
 
   it('ATM and ATL set the speaker; AT&W saves, ATZ restores, AT&F resets', () => {

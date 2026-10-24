@@ -21,6 +21,10 @@ for the **Bastard Operator From Hell**, and listen to him hang up on you.
 
 **[Open the live demo](https://a-prompt.stern.workers.dev)**: no install, no account.
 
+Its siblings run on the same Z80 core: **[Ok-Prompt](https://ok-prompt.stern.workers.dev)**,
+an MSX, and **[K-Prompt](https://k-prompt.stern.workers.dev)**, a ZX Spectrum
+with Brazil's TK90X and TK95.
+
 ![A-Prompt powering on: the A-PROMPT 64 sign-on](docs/screenshot-boot.png)
 
 ## Try it in 30 seconds
@@ -154,8 +158,8 @@ keeps games with timing loops playable. **Reset** stops a runaway program
   connects only to the boards in `src/phonebook.ts`. The modem negotiates
   telnet BINARY mode, so file transfers are 8-bit clean. The speaker plays
   the call: dial tone, touch tones, ringback, the 2100 Hz answer tone and
-  the handshake (CONNECT waits for it, as on a real modem), or a busy
-  signal. `ATM0` silences it, `ATL0`-`ATL3` set the volume, `AT&W` keeps
+  the handshake, all before the line opens, as a BBS only saw a caller
+  once both modems had trained; or a busy signal. `ATM0` silences it, `ATL0`-`ATL3` set the volume, `AT&W` keeps
   the setting and `ATZ` restores it.
 - **File transfer**: `XMODEM.COM` (CRC-16 or checksum; receives 128-byte
   and 1K blocks) and `ZMODEM.COM` (CRC-16, batch receive, restart from the
@@ -628,7 +632,7 @@ upload it to a drive and run it.
 | `src/terminal.ts` | xterm.js + CP437 + keyboard |
 | `src/bell.ts` | VT100 bell (Web Audio) |
 | `src/modem-audio.ts` | Modem speaker: dial, DTMF, ring, handshake, busy |
-| `src/call-sound.ts` | Holds CONNECT and early data until the handshake ends |
+| `src/call-sound.ts` | Plays the whole call, then opens the connection |
 | `src/aiboard.ts` | The AI board: menu, chat, program orders |
 | `src/deepseek.ts` | DeepSeek streaming client (browser, your key) |
 | `src/zmodem.ts` | ZMODEM sender and receiver in TypeScript, for the AI board |

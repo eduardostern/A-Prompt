@@ -132,9 +132,12 @@ user/drive; the CCP restores both from it after each program.
 
 - `withCallSound` (`src/call-sound.ts`) wraps the dialer: `startCallSound`
   (`src/modem-audio.ts`) plays dial tone, DTMF for a made-up number
-  (`digitsFor`), ringback, then the handshake; CONNECT and any early data
-  wait for it. Failure plays busy; the modem's own close after a remote
-  hang-up must not stop that.
+  (`digitsFor`), ringback, then the handshake, and only then opens the
+  connection; after that nothing is held. BBSes probe the terminal
+  (ESC[6n, telnet options) as soon as the connection opens and give up on
+  late answers, so the line must not wait for the sound. Failure plays
+  busy; the modem's own close after a remote hang-up must not stop that.
+  The same call-sound and modem-audio code is in Ok-Prompt and K-Prompt.
 - `ATM0` (no sound, no delay), `ATL0-3`, `AT&W` saves to localStorage
   `a-prompt.modem`, `ATZ` restores, `AT&F` resets. The bell and the modem
   share one AudioContext (`src/audio.ts`).
