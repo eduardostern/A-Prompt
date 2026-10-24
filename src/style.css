@@ -885,6 +885,9 @@ body::after {
 .info-sibling .info-kicker { grid-column: 1; color: #9d97ff; }
 .info-sibling-text { grid-column: 1; color: #b9cdc1; font-size: 12.5px; line-height: 1.55; }
 .info-sibling-text b { color: var(--text); font-weight: 600; }
+.info-sibling-k { margin-top: 10px; border-left-color: #00d8d8; /* K-Prompt's Spectrum cyan */ background: rgba(0, 216, 216, 0.06); }
+.info-sibling-k:hover { border-color: #00d8d8; background: rgba(0, 216, 216, 0.11); }
+.info-sibling-k .info-kicker, .info-sibling-k .info-sibling-go { color: #4fe3e3; }
 .info-sibling-go {
   grid-column: 2;
   grid-row: 1 / 3;
