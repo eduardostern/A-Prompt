@@ -27,3 +27,11 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      # Every push to main goes live on Cloudflare Workers once the tests pass.
+      - name: Deploy
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: e39390f735b92b562c7b19e9f83855a9
